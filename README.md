@@ -5,15 +5,13 @@ error recovery/cleanup in distributed transactions. The saga pattern describes
 two call flows, a forward flow that represents progress, and an opposite
 rollback flow which represents recovery and cleanup activities.
 
-This is especially useful for long running distributed transactions where you
-need to cleanup previous steps when failure occurs in downstream service.
-
 ## Goals
 
 - Provide better way to do apply and rollback for a multiple-step actions.
 - Provide adapters for Ecto.Multi and HTTP libs.
 - Warn when running non-idempotent operations without rollback.
 - Allow to run some operations concurrently.
+- Allow to manage retry/timeout policies.
 
 ## Use Cases
 
