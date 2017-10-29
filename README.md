@@ -43,10 +43,64 @@ Sage.new()
 |> Sage.execute(%{list_id: 123})
 ```
 
-### HTTP calls
+or
 
+```elixir
+defmodule MySage do
+  def execute(opts) do
+    Sage.new()
+    |> Sage.do(:create_user, retries: 3, timeout: 5000)
+    |> Sage.do(:add_to_subscribers)
+    |> Sage.do(:send_welcome_email)
+    |> Sage.execute(opts)
+  end
 
-### Ecto & Database
+  defp create_user(:forward, state, opts) do
+    opts[:http_adapter].post("http://example.com/abc")
+  end
+  defp create_user(:rollback, state, opts)
+
+  defp add_to_subscribers(:forward, state, opts)
+  defp add_to_subscribers(:rollback, state, opts)
+
+  defp send_welcome_email(:forward, state, opts)
+  defp send_welcome_email(:rollback, state, opts)
+end
+
+MySage.execute(http_adapter: HTTPoison)
+```
+
+# RFC's
+
+### Checkpoints
+
+Do not put names in `Saga.do/2`, instead use `Saga.checkpoint/3`.
+
+### Side effects
+
+One side effect per do or allow do's to return `{:ok, result, [side_effects]}` tuple?
+
+### Idempotency
+
+Sage.new()
+|> Sage.with_idempotency(enabled? \\ true) // or with_persistency()
+|> Sage.do(..) # Ok, result is written to a persistent storage
+|> Sage.do(..) # Ok, result is written
+|> Sage.do(..) # Error, probably nothing to rollback and retry of this sage would continue from this step (state is fetched from DB)
+|> Sage.do(..)
+
+### Parallel execution
+
+```
+s1 = Sage.new() |> Sage.do(...) |> Sage.do(...)
+s2 = Sage.new() |> Sage.do(...) |> Sage.do(...)
+
+Sage.new() |> Sage.do |> Sage.parallel(s1, s2) |> Sage.do(...) |> Sage.run()
+```
+
+### HTTP lib on top of Sage
+
+### Ecto.Multi replacement & Database integrations
 
 ## Installation
 
@@ -73,3 +127,5 @@ See [LICENSE.md](LICENSE.md).
 # Credits
 
 Parts of the code and implementation ideas are taken from [`Ecto.Multi`](https://github.com/elixir-ecto/ecto/blob/master/lib/ecto/multi.ex) module originally implemented by @michalmuskala and [`gisla`](https://github.com/mrallen1/gisla) by @mrallen1 which implements Sagas for Erlang.
+
+Sagas idea have origins from [this whitepaper](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) from 80's.
