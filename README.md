@@ -104,7 +104,17 @@ Sometimes we want to run function on beginning and end of sage irrespectively to
 
 This is especially useful to init a DB transaction and rollback it after all execution stages:
 
-`Sage.do(apply, rollback, fn _ -> Repo.transaction() end, fn {:error, reason} -> Repo.rollback() end)`
+```
+Wrap execution in Repo.transaction and rollback it if pipeline fails
+Sage.do(apply, rollback, fn _ -> Repo.transaction() end, fn {:error, reason} -> Repo.rollback() end)
+```
+
+Or you want to ack or nack to a message queue:
+
+```
+Wrap execution in Repo.transaction and rollback it if pipeline fails
+Sage.do(apply, rollback, fn _ -> AMQP.ack() end, fn {:error, reason} -> AMQP.nack() end)
+```
 
 ### Retries
 
