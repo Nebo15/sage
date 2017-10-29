@@ -106,6 +106,12 @@ This is especially useful to init a DB transaction and rollback it after all exe
 
 `Sage.do(apply, rollback, fn _ -> Repo.transaction() end, fn {:error, reason} -> Repo.rollback() end)`
 
+### Retries
+
+Ability to set a retry policy for an individual stage, eg:
+
+`Sage.do(..., retry_limit: 3, retry_backoff: :exponential, retry_base_timeout: 1000)`
+
 ### HTTP lib on top of Sage
 
 ### Ecto.Multi replacement & Database integrations
