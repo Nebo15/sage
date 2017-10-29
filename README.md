@@ -70,6 +70,28 @@ end
 MySage.execute(http_adapter: HTTPoison)
 ```
 
+# Interface
+
+1. Checkpoint for each side effect
+```
+@type pipeline :: %{}
+@type step :: %{}
+@type retry_opts :: [retry_limit: 3, retry_backoff: :exponential, retry_base_timeout: 1000]
+@type sage_apply :: fn prev_results, state
+@type sage_rollback :: fn apply_result, state
+
+@type finally :: fn {:ok, result, other_side_effects}, state -> | fn {:error, failed_step_name :: atom}, state ->
+
+@spec new(opts :: Keyword.t) :: pipeline
+@spec retry(pipeline :: pipeline, step :: Sage.step, opts :: retry_opts) :: pipeline
+@spec do(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
+@spec do_cached(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
+@spec parallel(pipeline :: pipeline, parallel1 :: pipeline, parallel2 :: pipeline, ..) :: pipeline
+@spec finally(result :: pipeline, callback :: function) :: pipeline
+
+@spec execute(sage) :: {:ok, result, [other_side_effects]} | {:error, reason}
+```
+
 # RFC's
 
 ### Checkpoints
@@ -123,6 +145,25 @@ Ability to set a retry policy for an individual stage, eg:
 `Sage.do(..., retry_limit: 3, retry_backoff: :exponential, retry_base_timeout: 1000)`
 
 ### HTTP lib on top of Sage
+
+See https://gist.github.com/michalmuskala/5cee518b918aa5a441e757efca965d22
+
+#### Request Cache
+
+`do_cached/2`
+
+### Macro syntax
+
+1.
+
+```
+Sage.new()
+|-> apply()
+|-< rollback()
+|-> apply()
+|-< rollback()
+|> Sage.execute()
+```
 
 ### Ecto.Multi replacement & Database integrations
 
