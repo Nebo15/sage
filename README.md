@@ -98,6 +98,14 @@ s2 = Sage.new() |> Sage.do(...) |> Sage.do(...)
 Sage.new() |> Sage.do |> Sage.parallel(s1, s2) |> Sage.do(...) |> Sage.run()
 ```
 
+### Before and Finally
+
+Sometimes we want to run function on beginning and end of sage irrespectively to the individual execution stages (about the same as Ecto.Multu returns you `{:ok, result}` or error stage which is failed).
+
+This is especially useful to init a DB transaction and rollback it after all execution stages:
+
+`Sage.do(apply, rollback, fn _ -> Repo.transaction() end, fn {:error, reason} -> Repo.rollback() end)`
+
 ### HTTP lib on top of Sage
 
 ### Ecto.Multi replacement & Database integrations
