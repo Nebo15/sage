@@ -1,5 +1,7 @@
 # Sage
 
+All guarantees that transaction steps (independent atomic actions) are completed or all failed steps are compensated.
+
 This is a library for Elixir that implements the [Saga][saga-paper] pattern for
 error recovery/cleanup in distributed transactions. The saga pattern describes
 two call flows, a forward flow that represents progress, and an opposite
@@ -15,7 +17,21 @@ rollback flow which represents recovery and cleanup activities.
 
 ## Use Cases
 
+- Updating state in two different databases.
+- Updating state of a central RDBM's along with state updates issued by a HTTP calls.
+- Updating remote state over multiple upstream API's. (Complex requests logic -> create customer, create subscription, charge subscription)
+
+
 Sage allows you to use adapter to simplify integration with database and HTTP clients.
+
+## Terminology
+
+# The database management
+```
+# system guarantees that either all the transactions m a saga are successfully completed or compensatmg transactions are run to amend a partial execution
+transaction(..., compensate_transaction :: function)
+
+```
 
 ### Direct usage
 
@@ -72,7 +88,6 @@ MySage.execute(http_adapter: HTTPoison)
 
 # Interface
 
-1. Checkpoint for each side effect
 ```
 @type pipeline :: %{}
 @type step :: %{}
@@ -82,14 +97,52 @@ MySage.execute(http_adapter: HTTPoison)
 
 @type finally :: fn {:ok, result, other_side_effects}, state -> | fn {:error, failed_step_name :: atom}, state ->
 
-@spec new(opts :: Keyword.t) :: pipeline
+@spec new(shared_state :: any) :: pipeline
 @spec retry(pipeline :: pipeline, step :: Sage.step, opts :: retry_opts) :: pipeline
-@spec do(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
-@spec do_cached(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
+@spec run(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
+@spec run_cached(pipeline :: pipeline, name :: atom, apply :: sage_apply, rollback :: sage_rollback) :: pipeline
 @spec parallel(pipeline :: pipeline, parallel1 :: pipeline, parallel2 :: pipeline, ..) :: pipeline
-@spec finally(result :: pipeline, callback :: function) :: pipeline
 
-@spec execute(sage) :: {:ok, result, [other_side_effects]} | {:error, reason}
+@spec finally(result :: pipeline, callback :: function) :: pipeline # Should execute even if there is a bug in the code
+
+@spec execute(pipeline :: pipeline) :: {:ok, result, [other_side_effects]} | {:error, reason}
+
+@spec isolate(pipeline :: pipeline, before :: function, rollback :: function) # isolate(sage, Repo.transaction/1, Repo.rollback/1)
+
+@spec run_multi(pipeline :: pipeline, Ecto.Multi.t, error_handler :: function) :: pipeline
+@spec from_multi(Ecto.Multi.t, error_handler :: function)
+@spec with_idempotency(key :: string, adapter :: module)
+
+@spec append
+@spec prepend
+@spec merge(pipeline, pipeline | {m, f, a})
+
+# Ideas
+@spec abort
+@spec run_async()
+# run_async() |> run_async() |> run() - run() would await for all async operations to complete, instead of parallel()
+
+
+@spec checkpoint(retry_opts) # Retry everything between checkpoints
+@spec forward_recovery(retry_opts) # Called from a compensating transaction block, it tells how many times we want to retry upstream transactions before failure ## can be in format of returning {:retry, blah blah} from it, which makes `checkpoint/2` very simple. No tx code, but retry logic in rollback code.
+
+@type rollback_return :: {:error, reason} # I am compensated my transactions, continue backwards-recovery
+                       | {:ok, :retry} # I am compensated by transaction, let's retry
+                       | {:abort, reason} # I am compensated transaction and want to force backwards recovery on all steps
+```
+
+*Error is returned from the latest compensating transaction. We don't care about compensation in between.*
+
+```
+defimpl Sagas, for: Ecto.Multi do
+  @impl true
+  def run(multi) do
+    from_multi(multi)
+  end
+
+  defp from_multi(%Ecto.Multi{}), do: ...
+end
+
 ```
 
 # RFC's
@@ -165,7 +218,7 @@ Sage.new()
 |> Sage.execute()
 ```
 
-### Ecto.Multi replacement & Database integrations
+### Ecto.Multi replacement & Database integrations & Runnin saga in Repo.transaction(...)
 
 ## Installation
 
