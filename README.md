@@ -1,6 +1,9 @@
 # Sage
 
-Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir. It is go to way when you dealing with distributed transactions, especially with an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are successfully completed or compensating transactions are run to amend a partial execution.
+Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern
+in pure Elixir. It is go to way when you dealing with distributed transactions, especially with
+an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are
+successfully completed or compensating transactions are run to amend a partial execution.
 
 > It’s like `Ecto.Multi` but across business logic and third-party APIs.
 >
@@ -123,6 +126,26 @@ Along with more readable code, you getting:
 - much simpler and easier to test code for transaction and compensation function implementations;
 - retries, caching, circuit breaking and asynchronous requests;
 - declarative way to define your transactions and run them.
+
+## Critical Error Handling
+
+### For Transactions
+
+Transactions are wrapped in a `try..catch` block. Whenever a critical error occurs (exception is raised or function has an unexpected return) Sage will run all compensations and then reraise exception, so you would see it like it occurred without Sage.
+
+TODO: Catch exists?
+
+### For Compensations
+
+By default, compensations are not protected from critical errors and would raise an exception. This is done to keep simplicity and follow "let it fall" pattern of the language, thinking that this kind of errors should be logged and then manually investigated by a developer.
+
+But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`. When it's registered, compensations are wrapped in a `try..catch` block and it's error handler responsibility to take care about future actions. Few solutions you might want to try:
+
+- Send notification to a Slack channel about need of manual resolution;
+- Retry compensation;
+- Spin off a new supervised process that would retry compensation and return an error in the Sage. (Useful when you have connection issues that would be resolved at some point in future.)
+
+Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
 
 # RFC's
 
