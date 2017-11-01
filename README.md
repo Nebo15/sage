@@ -139,7 +139,7 @@ TODO: Catch exists?
 
 By default, compensations are not protected from critical errors and would raise an exception. This is done to keep simplicity and follow "let it fall" pattern of the language, thinking that this kind of errors should be logged and then manually investigated by a developer.
 
-But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`. When it's registered, compensations are wrapped in a `try..catch` block and it's error handler responsibility to take care about future actions. Few solutions you might want to try:
+But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`. When it's registered, compensations are wrapped in a `try..catch` block and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
 - Send notification to a Slack channel about need of manual resolution;
 - Retry compensation;
