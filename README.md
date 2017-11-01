@@ -103,7 +103,7 @@ import Sage
 new()
 |> run(:user, &create_user/2)
 |> run_cached(:plans, &fetch_subscription_plans/3)
-|> checkpoint(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `global_opts`
+|> checkpoint(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `attrs`
 |> run(:subscription, &create_subscription/2, &delete_subscription/3)
 |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
 |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
@@ -117,7 +117,7 @@ Along with more readable code, you getting:
 
 - guarantees that transaction steps are completed or all failed steps are compensated;
 - much simpler and easier to test code for transaction and compensation function implementations;
-- caching, circuit breaking and asynchronous requests;
+- retries, caching, circuit breaking and asynchronous requests;
 - declarative way to define your transactions and run them.
 
 # RFC's
