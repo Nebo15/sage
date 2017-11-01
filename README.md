@@ -2,6 +2,9 @@
 
 Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir. It is go to way when you dealing with distributed transactions, especially with an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are successfully completed or compensating transactions are run to amend a partial execution.
 
+> It’s like `Ecto.Multi` but across business logic and third-party APIs.
+> -- <cite>@jayjun</cite>
+
 This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's beset to make sure that it's and all predecessors compensations are completed.
 
 To visualize, let's imagine we have a 4-step transaction. Successful flow should look something like this:
