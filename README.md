@@ -35,13 +35,16 @@ Along with that simple idea, you will get much more out of the box with Sage:
 - Ease to write circuit breakers;
 - Code that is clean and easy to test;
 - Low cost of integration in existing code base and low performance overhead;
+- Ability to don't lock the database for long running transactions;
 - Extensibility - write your own handler for critical errors or metric collector to measure how much time each step took.
 
 ## Rationale
 
 Lot's of applications I've seen face a common task - interaction with other API's to offload some work to third-party SaaS products or micro-services. Also, sometimes you simply need to interact with more than one database.
 
-In those cases you can't get transaction isolation that we all are used to thanks to RDBMS. When failing in the middle of transaction now it's the developer responsibility to make sure we cleaned out all side effects to don't leave application in inconsistent state.
+In those cases you can't get transaction isolation that we all are used to thanks to RDBMS.
+When failing in the middle of transaction now it's the developer responsibility to make sure
+we cleaned out all side effects to don't leave application in inconsistent state.
 
 Consider following pseudo-code:
 
@@ -132,19 +135,24 @@ Along with more readable code, you getting:
 
 ### For Transactions
 
-Transactions are wrapped in a `try..catch` block. Whenever a critical error occurs (exception is raised or function has an unexpected return) Sage will run all compensations and then reraise exception, so you would see it like it occurred without Sage.
-
-TODO: Catch exists?
+Transactions are wrapped in a `try..catch` block.
+Whenever a critical error occurs (exception is raised, exit signal is received or function has an unexpected return)
+Sage will run all compensations and then reraise exception, so you would see it like it occurred without Sage.
 
 ### For Compensations
 
-By default, compensations are not protected from critical errors and would raise an exception. This is done to keep simplicity and follow "let it fall" pattern of the language, thinking that this kind of errors should be logged and then manually investigated by a developer.
+By default, compensations are not protected from critical errors and would raise an exception.
+This is done to keep simplicity and follow "let it fall" pattern of the language,
+thinking that this kind of errors should be logged and then manually investigated by a developer.
 
-But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`. When it's registered, compensations are wrapped in a `try..catch` block and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
+But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`.
+When it's registered, compensations are wrapped in a `try..catch` block
+and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
 - Send notification to a Slack channel about need of manual resolution;
 - Retry compensation;
-- Spin off a new supervised process that would retry compensation and return an error in the Sage. (Useful when you have connection issues that would be resolved at some point in future.)
+- Spin off a new supervised process that would retry compensation and return an error in the Sage.
+(Useful when you have connection issues that would be resolved at some point in future.)
 
 Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
 

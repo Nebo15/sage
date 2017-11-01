@@ -1,68 +1,34 @@
 defmodule Sage do
   @moduledoc """
-  Documentation for Sage.
+  Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern
+  in pure Elixir. It is go to way when you dealing with distributed transactions, especially with
+  an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are
+  successfully completed or compensating transactions are run to amend a partial execution.
 
-  ## Extensibility
+  ## Critical Error Handling
 
-  Other modules can have protocol implementations for `Sage`, eg:
+  ### For Transactions
 
-    defimpl Sage, for: MyHTTPClient do
+  Transactions are wrapped in a `try..catch` block.
+  Whenever a critical error occurs (exception is raised or function has an unexpected return)
+  Sage will run all compensations and then reraise exception, so you would see it like it occurred without Sage.
 
+  ### For Compensations
 
-    end
+  By default, compensations are not protected from critical errors and would raise an exception.
+  This is done to keep simplicity and follow "let it fall" pattern of the language,
+  thinking that this kind of errors should be logged and then manually investigated by a developer.
 
+  But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`.
+  When it's registered, compensations are wrapped in a `try..catch` block
+  and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
-    Example extensions:
+  - Send notification to a Slack channel about need of manual resolution;
+  - Retry compensation;
+  - Spin off a new supervised process that would retry compensation and return an error in the Sage.
+  (Useful when you have connection issues that would be resolved at some point in future.)
 
-    |> run_request(:post, fn )
-
-  ## Benefits
-
-  ### vs `with`
-
-  ## Handling errors
-
-  ### For transaction callback
-
-  ### For compensating function
-
-  What we could do:
-
-  1. Give up. It's essentially to let it fail and let application developer to find this error in logs and fix manually.
-
-  2. Retry. We can reduce amount of manual work by keeping retrying to compensate transaction.
-  Benefits of this approach is not clear. It application has a bug - retries won't help. If connection went down - we need very large timeouts
-  and sometimes internet connection won't recover at all.
-
-  3. Spin off a compensating process and return error. Implement steps 1 or 2 in this process.
-
-
-
-  What if Internet connection went down and compensations are failing?
-
-  One possible solution 1s to make use of software fault tolerant techniques along
-  the lmes of recovery blocks [Ande8la,Horn74a] A recovery block 1s
-  an alternate or secondary block of code that 1s provided m case a
-  failure 1s detected m the primary block If a failure IS detected the
-  system 1s reset to Its pre-primary state and the secondary block 1s executed
-
-  The secondary block 1s designed to achieve the same end as the primary usmg
-  a different algorithm or technique, hopefully avoiding the primary’s failure
-
-
-  The other possible solution to this problem
-1s manual mterventlon The erroneous transaction
-1s first aborted Then It 1s given to an apphcation
-programmer who, given a descrlptlon of
-the error, can correct it The SEC (or the apphcation)
-then reruns the transactlon and contmues
-processing the saga
-Fortunately, while the transaction 1s bemg
-manually repalred the saga does not hold any
-database resources (1 e , locks) Hence, the fact
-that an already long saga ~111 take even longer
-will not slgmficantly affect performance of other
-transactions
+  Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
 
   ## Tracing your Sage
 
@@ -70,9 +36,8 @@ transactions
   you can use `after_transaction`, `before_transaction`, `after_compensation`, `before_compensation`
   callbacks.
 
-  ...
-
-  - `before_and_after_state` is shared across all callback runs. By default: `%{execute_args: execute_args}`.
+  They are receiving attrs from `execute/1` call, but state mutations won't affects Sage execution - only other
+  tracing callbacks would have access to it.
 
   ## Examples
 
@@ -111,10 +76,11 @@ transactions
         {:error, reason}
     end
 
-    # If you want to use DB transaction instead of certain compensations:
+  Wrapping Sage in a transaction:
 
     # In this sage we don't need `&delete_user/2` and `&rollback_plan_for_a_user/3`,
     # everything is rolled back as part of DB transaction
+
     my_db_aware_sage()
     |> Sage.to_function(global_state)
     |> Repo.transaction()
@@ -204,63 +170,4 @@ transactions
   @spec new() :: t()
   def new,
     do: %Sage{}
-end
-
-defmodule Sage.Experimental do
-  @doc """
-  Appends sage with an cached transaction and function to compensate it's side effects.
-
-  Cache is stored by calling a `Sage.CacheAdapter` implementation.
-  """
-  @spec run_cached(sage :: t(), apply :: transaction(), rollback :: compensation(), opts :: cache_opts()) :: t()
-
-  @doc """
-  Appends sage with an asynchronous cached transaction and function to compensate it's side effects.
-
-  Next non-asynchronous operation will await for this function return.
-
-  Cache is stored by calling a `Sage.CacheAdapter` implementation.
-  """
-  @spec run_async_cached(sage :: t(), apply :: transaction(), rollback :: compensation(), opts :: cache_opts()) :: t()
-
-  @doc """
-  Appends sage with an checkpoint at which forward retries should occur.
-
-  Internally this is the same as using:
-
-      |> run(fn _ -> {:ok, :noop}, fn state -> if adapter.retry?(state, retry_opts) do {:retry, state} else {:ok, state} end)
-
-  TODO: Also can be used as point of synchronization, eg.
-    - to persist temporary state in a DB to idempotently retry it;
-    - to ack previous execution stage to MQ and create a new one.
-
-  TODO: Rename to retry?
-  """
-  @spec checkpoint(sage :: t(), retry_opts :: retry_opts()) :: t()
-
-  @doc """
-  Register function that will handle all critical errors for a compensating functions.
-
-  Internally we will wrap compensation in a try..catch block and handoff error handling to a callback function.
-
-  This allows to implement complex rescuing strategies, eg:
-    - Notify developer about need of manual resolution;
-    - Retries for compensations;
-    - Spin off a compensation process and return an error in the sage.
-    Process can keep retrying to compensate effects by storing sage in state or a persistent storage.
-  """
-  @spec on_compensation_error(sage :: t(), {module(), function(), [any()]}) :: t()
-
-  @doc """
-  Register persistent adapter and idempotency key generator to make it possible to re-run same requests
-  idempotently (by either replying with old success response or continuing from the latest failed Sage transaction).
-  """
-  @spec with_idempotency(sage :: t(), adapter :: module()) :: t()
-
-  @doc """
-  Concurrently run transaction after it's dependencies.
-
-  Would allow to build a dependency tree and run everything with maximum concurrency.
-  """
-  @spec run_async_after(sage :: t(), [after_name :: name()], apply :: transaction(), rollback :: compensation()) :: t()
 end
