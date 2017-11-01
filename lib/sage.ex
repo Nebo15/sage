@@ -256,4 +256,11 @@ defmodule Sage.Experimental do
   idempotently (by either replying with old success response or continuing from the latest failed Sage transaction).
   """
   @spec with_idempotency(sage :: t(), adapter :: module()) :: t()
+
+  @doc """
+  Concurrently run transaction after it's dependencies.
+
+  Would allow to build a dependency tree and run everything with maximum concurrency.
+  """
+  @spec run_async_after(sage :: t(), [after_name :: name()], apply :: transaction(), rollback :: compensation()) :: t()
 end
