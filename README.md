@@ -1,30 +1,124 @@
 # Sage
 
-All guarantees that transaction steps (independent atomic actions) are completed or all failed steps are compensated.
+Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir. It is go to way when you dealing with distributed transactions, especially with an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are successfully completed or compensating transactions are run to amend a partial execution.
 
-system guarantees that either all the transactions m a saga are successfully completed or compensatmg transactions are run to amend a partial execution
+This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's beset to make sure that it's and all predecessors compensations are completed.
 
-This is a library for Elixir that implements the [Saga][saga-paper] pattern for
-error recovery/cleanup in distributed transactions. The saga pattern describes
-two call flows, a forward flow that represents progress, and an opposite
-rollback flow which represents recovery and cleanup activities.
+To visualize, let's imagine we have a 4-step transaction. Successful flow should look something like this:
+```
+[T1] -> [T2] -> [T3] -> [T4]
+```
 
-## Goals
+and if we have a failure on 3-d step Sage will cleanup side effects by running compensation functions:
 
-- Provide better way to do apply and rollback for a multiple-step actions.
-- Provide adapters for Ecto.Multi and HTTP libs.
-- Warn when running non-idempotent operations without rollback.
-- Allow to run some operations concurrently.
-- Allow to manage retry/timeout policies.
+```
+[T1] -> [T2] -> [T3 has an error]
+                ↓
+[C1] <- [C2] <- [C3]
+```
 
-## Use Cases
+## Additional Features
 
-- Updating state in two different databases.
-- Updating state of a central RDBM's along with state updates issued by a HTTP calls.
-- Updating remote state over multiple upstream API's. (Complex requests logic -> create customer, create subscription, charge subscription)
+Along with that simple idea, you will get much more out of the box with Sage:
 
+- Transaction retries;
+- TTL-based caching;
+- Transaction timeouts;
+- Asynchronous transactions;
+- Ease to write circuit breakers;
+- Code that is clean and easy to test;
+- Extensibility - write your own handler for critical errors or metric collector to measure how much time each step took.
 
-Sage allows you to use adapter to simplify integration with database and HTTP clients.
+## Rationale
+
+Lot's of applications I've seen face a common task - interaction with other API's to offload some work to third-party SaaS products or micro-services. Also, sometimes you simply need to interact with more than one database.
+
+In those cases you can't get transaction isolation that we all are used to thanks to RDBMS. When failing in the middle of transaction now it's the developer responsibility to make sure we cleaned out all side effects to don't leave application in inconsistent state.
+
+Consider following pseudo-code:
+
+```elixir
+defmodule WithSagas do
+  def create_and_subscribe_user(attrs) do
+    Repo.transaction(fn ->
+      with {:ok, user} <- create_user(attrs),
+           {:ok, plans} <- fetch_subscription_plans(attrs),
+           {:ok, charge} <- charge_card(user, subscription),
+           {:ok, subscription} <- create_subscription(user, plan, attrs),
+           {:ok, _delivery} <- schedule_delivery(user, subscription, attrs),
+           {:ok, _receipt} <- send_email_receipt(user, subscription, attrs),
+           {:ok, user} <- update_user(user, %{subscription: subscription}) do
+        acknowledge_job(opts)
+      else
+        {:error, {:carge_failed, _reason}} ->
+          # First problem: charge is not available here
+          :ok = refund(charge)
+          reject_job(opts)
+
+        {:error, {:create_subscription, _reason}} ->
+          # Second problem: growing list of compensations
+          :ok = refund(charge)
+          :ok = delete_subscription(subscription)
+          reject_job(opts)
+
+        # Third problem: how to know should be send another email, at which stage we failed?
+
+        other ->
+          # Will rollback transaction on all other errors
+          :ok = ensure_deleted(fn -> refund(charge) end)
+          :ok = ensure_deleted(fn -> delete_subscription(subscription) end)
+          :ok = ensure_deleted(fn -> delete_delivery_from_schedule(delivery) end)
+          reject_job(opts)
+
+          other
+      end
+    end)
+  end
+
+  defp ensure_deleted(cb) do
+    case cb.() do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+    end
+  end
+end
+```
+
+Along with issues highlighted in code itself, there are few more:
+
+1. To know at which stage we failed we need to keep eye on special returns from functions we are using here;
+2. Hard to control that for all cases there is a condition to compensate then;
+3. Does not cover retries, async operations or circuit breaker;
+4. Can not keep things together, because `with` returns are not available in `else` block;
+5. No error handling in case of code bugs;
+5. Hard to test.
+
+Of course, you can manage that by splitting `create_and_subscribe_user/1`, but the resulting code would take more space and be harder to maintain.
+
+Instead, let's see how this pipeline would look with `Sage`:
+
+```elixir
+import Sage
+
+new()
+|> run(:user, &create_user/2)
+|> run_cached(:plans, &fetch_subscription_plans/3)
+|> checkpoint(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `global_opts`
+|> run(:subscription, &create_subscription/2, &delete_subscription/3)
+|> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
+|> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
+|> run(:update_user, &set_plan_for_a_user/2)
+|> finally(&acknowledge_job/2)
+|> to_function(attrs)
+|> Repo.transaction()
+```
+
+Along with more readable code, you getting:
+
+- guarantees that transaction steps are completed or all failed steps are compensated;
+- much simpler and easier to test code for transaction and compensation function implementations;
+- caching, circuit breaking and asynchronous requests;
+- declarative way to define your transactions and run them.
 
 # RFC's
 

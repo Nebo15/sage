@@ -133,6 +133,7 @@ transactions
                                {:ok, any()} # I am compensated my transactions, continue backwards-recovery
                              | {:abort, any()} # I am compensated transaction and want to force backwards recovery on all steps
                              | {:retry, any()}) # I am compensated by transaction, let's retry with this data from my tx
+                             | {:continue, any()} # I am the Circuit Breaker and I know how live wit this error
 
   @typep finally :: {module(), atom(), [any()]}
                   | ({:ok | :error, effects_so_far :: effects()} -> no_return)
