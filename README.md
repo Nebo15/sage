@@ -34,6 +34,7 @@ Along with that simple idea, you will get much more out of the box with Sage:
 - Asynchronous transactions;
 - Ease to write circuit breakers;
 - Code that is clean and easy to test;
+- Low cost of integration in existing code base;
 - Extensibility - write your own handler for critical errors or metric collector to measure how much time each step took.
 
 ## Rationale
