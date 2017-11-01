@@ -34,7 +34,7 @@ Along with that simple idea, you will get much more out of the box with Sage:
 - Asynchronous transactions;
 - Ease to write circuit breakers;
 - Code that is clean and easy to test;
-- Low cost of integration in existing code base;
+- Low cost of integration in existing code base and low performance overhead;
 - Extensibility - write your own handler for critical errors or metric collector to measure how much time each step took.
 
 ## Rationale
@@ -147,6 +147,11 @@ But if that's not enough for you, it is possible to register handler via `on_com
 - Spin off a new supervised process that would retry compensation and return an error in the Sage. (Useful when you have connection issues that would be resolved at some point in future.)
 
 Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
+
+## For `finally/2` callback
+
+Sage does it's best to make sure final callback is executed even if there is a program bug in the code.
+This guarantee simplifies integration with a job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
 
 # RFC's
 
