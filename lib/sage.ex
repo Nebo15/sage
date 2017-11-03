@@ -105,7 +105,7 @@ defmodule Sage do
                   | [({:ok | :error, effects_so_far :: effects()} -> no_return)]
 
   @type t :: %__MODULE__{
-    operations: [{name(), {:run | :run_async, transaction(), compensation()}}],
+    operations: [{name(), {:run, transaction(), compensation()} | {:run_async, transaction(), compensation(), timeout()}}],
     operation_names: MapSet.t(),
     on_compensation_error: :raise | module(),
     finally: finally()
@@ -175,68 +175,136 @@ defmodule Sage do
   def execute(%Sage{} = sage, opts) do
     sage.operations
     |> Enum.reverse()
-    |> execute_transactions([], opts, {nil, %{}, {0, []}, false, nil})
+    |> execute_transactions([], opts, {nil, %{}, {0, []}, false, []})
   end
 
   defp execute_transactions([{name, operation} | operations], executed_operations, opts, state) do
-    {_last_effect_or_reason, effects_so_far, retries, _abort?, _return} = state
+    {_last_effect_or_error, _effects_so_far, _retries, _abort?, tasks} = state
 
-    case execute_transaction(operation, effects_so_far, opts) do
-      {:ok, effect} ->
-        state = {effect, Map.put(effects_so_far, name, effect), retries, false, nil}
-        execute_transactions(operations, [{name, operation} | executed_operations], opts, state)
+    {{name, operation}, state}
+    |> maybe_await_for_tasks(tasks)
+    |> maybe_execute_transaction(opts)
+    |> handle_operation_result()
+    |> execute_operation_or_compensation(operations, executed_operations, opts)
+  end
+  defp execute_transactions([], executed_operations, opts, state) do
+    {last_effect, effects_so_far, _retries, _abort?, tasks} = state
 
-      {:abort, reason} ->
-        state = {reason, Map.put(effects_so_far, name, reason), retries, true, {name, reason}}
-        execute_compensations([{name, operation} | executed_operations], operations, opts, state)
-
-      {:error, reason} ->
-        state = {reason, Map.put(effects_so_far, name, reason), retries, false, {name, reason}}
-        execute_compensations([{name, operation} | executed_operations], operations, opts, state)
+    if tasks == [] do
+      {:ok, last_effect, effects_so_far}
+    else
+      {:execute, state}
+      |> maybe_await_for_tasks(tasks)
+      |> handle_operation_result()
+      |> execute_operation_or_compensation([], executed_operations, opts)
     end
   end
 
-  defp execute_transactions([], _executed_operations, _opts, state) do
-    {last_effect, effects_so_far, _retries, _abort?, _return} = state
-    {:ok, last_effect, effects_so_far}
+  # TODO: Move effects_so_far from state
+
+  defp maybe_await_for_tasks({operation, state}, []), do: {operation, state}
+  defp maybe_await_for_tasks({operation, state}, tasks) do
+    state = put_elem(state, 4, [])
+
+    tasks
+    |> Enum.map(fn {name, async_job} -> {name, Task.await(async_job)} end)
+    |> Enum.reduce({operation, state}, fn {name, result}, {operation, state} ->
+      case handle_operation_result({name, :async, result, state}) do
+        {:next_operation, {^name, :async}, state} ->
+          {operation, state}
+
+        {:compensate, {^name, :async}, state} ->
+          {:compensate, state}
+      end
+    end)
+  end
+
+  defp maybe_execute_transaction({:compensate, state}, _opts),
+    do: {:compensate, state}
+  defp maybe_execute_transaction({{name, operation}, state}, opts) do
+    {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks} = state
+    {name, operation, execute_transaction(operation, effects_so_far, opts), state}
   end
 
   defp execute_transaction({:run, operation, _compensation}, effects_so_far, opts) do
     apply_transaction_fun(operation, effects_so_far, opts)
   end
+  defp execute_transaction({:run_async, operation, _compensation}, effects_so_far, opts) do
+    Task.async(fn -> apply_transaction_fun(operation, effects_so_far, opts) end)
+  end
+
+  defp handle_operation_result({:compensate, state}),
+    do: {:compensate, state}
+  defp handle_operation_result({:execute, state}),
+    do: {:execute, state}
+  defp handle_operation_result({name, operation, %Task{} = async_job, state}) do
+    {last_effect_or_error, effects_so_far, retries, _abort?, tasks} = state
+    state = {last_effect_or_error, effects_so_far, retries, false, [{name, async_job} | tasks]}
+    {:next_operation, {name, operation}, state}
+  end
+  defp handle_operation_result({name, operation, {:ok, effect}, state}) do
+    {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
+    state = {effect, Map.put(effects_so_far, name, effect), retries, false, []}
+    {:next_operation, {name, operation}, state}
+  end
+  defp handle_operation_result({name, operation, {:abort, reason}, state}) do
+    {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
+    state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, true, []}
+    {:compensate, {name, operation}, state}
+  end
+  defp handle_operation_result({name, operation, {:error, reason}, state}) do
+    {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
+    state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, false, []}
+    {:compensate, {name, operation}, state}
+  end
+
+  defp execute_operation_or_compensation({:next_operation, {name, operation}, state}, operations, executed_operations, opts) do
+    execute_transactions(operations, [{name, operation} | executed_operations], opts, state)
+  end
+  defp execute_operation_or_compensation({:compensate, {name, operation}, state}, operations, executed_operations, opts) do
+    execute_compensations([{name, operation} | executed_operations], operations, opts, state)
+  end
+  defp execute_operation_or_compensation({:compensate, state}, operations, executed_operations, opts) do
+    execute_compensations(executed_operations, operations, opts, state)
+  end
+  defp execute_operation_or_compensation({:execute, state}, [], [{prev_name, _prev_operation} | executed_operations], opts) do
+    {_last_effect_or_error, effects_so_far, _retries, _abort?, []} = state
+    state = put_elem(state, 0, Map.get(effects_so_far, prev_name))
+    execute_transactions([], executed_operations, opts, state)
+  end
 
   defp execute_compensations([{name, operation} | operations], compensated_operations, opts, state) do
-    {last_effect_or_reason, effects_so_far, retries, abort?, return} = state
+    {last_effect_or_error, effects_so_far, retries, abort?, []} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
 
     case execute_compensation(operation, effect_to_compensate, opts, state) do
       :ok ->
-        state = {last_effect_or_reason, effects_so_far, retries, abort?, return}
+        state = {last_effect_or_error, effects_so_far, retries, abort?, []}
         execute_compensations(operations, [{name, operation} | compensated_operations], opts, state)
 
       :abort ->
-        state = {last_effect_or_reason, effects_so_far, retries, true, return}
+        state = {last_effect_or_error, effects_so_far, retries, true, []}
         execute_compensations(operations, [{name, operation} | compensated_operations], opts, state)
 
       {:retry, retry_opts} ->
         {count, _retry_opts} = retries
         if abort? do
-          state = {last_effect_or_reason, effects_so_far, retries, abort?, return}
+          state = {last_effect_or_error, effects_so_far, retries, abort?, []}
           execute_compensations(operations, [{name, operation} | compensated_operations], opts, state)
         else
           if Keyword.fetch!(retry_opts, :retry_limit) > count do
-            state = {last_effect_or_reason, effects_so_far, {count + 1, retry_opts}, false, return}
+            state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, []}
             execute_transactions([{name, operation} | compensated_operations], operations, opts, state)
           else
-            state = {last_effect_or_reason, effects_so_far, retries, abort?, return}
+            state = {last_effect_or_error, effects_so_far, retries, abort?, []}
             execute_compensations(operations, [{name, operation} | compensated_operations], opts, state)
           end
         end
 
       {:continue, effect} ->
-        {return_name, _return_reason} = return
+        {return_name, _return_reason} = last_effect_or_error
         if return_name == name do
-          state = {effect, Map.put(effects_so_far, name, effect), retries, false, nil}
+          state = {effect, Map.put(effects_so_far, name, effect), retries, false, []}
           execute_transactions(compensated_operations, [{name, operation} | operations], opts, state)
         else
           raise "Circuit breaking is only allowed for continuing compensated transaction"
@@ -245,13 +313,13 @@ defmodule Sage do
   end
 
   defp execute_compensations([], _compensated_operations, _opts, state) do
-    {_last_effect, _effects_so_far, _retries, _abort?, {_name, reason}} = state
+    {{_name, reason}, _effects_so_far, _retries, _abort?, _tasks} = state
     {:error, reason}
   end
 
   defp execute_compensation({:run, _operation, :noop}, _effect_to_compensate, _opts, _state), do: :ok
-  defp execute_compensation({:run, _operation, compensation}, effect_to_compensate, opts, state) do
-    {_last_effect_or_reason, _effects_so_far, _retries, _abort?, {name, reason}} = state
+  defp execute_compensation({_type, _operation, compensation}, effect_to_compensate, opts, state) do
+    {{name, reason}, _effects_so_far, _retries, _abort?, _tasks} = state
     apply_compensation_fun(compensation, effect_to_compensate, {name, reason}, opts)
   end
 

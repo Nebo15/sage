@@ -22,11 +22,23 @@ defmodule SideEffectAgent do
   end
 
   def create_side_effect(agent, effect) do
-    Agent.update(agent, fn effects -> [effect | effects] end)
+    Agent.update(agent, fn effects ->
+      if effect not in effects do
+        [effect | effects]
+      else
+        raise "Trying to re-apply stale effect"
+      end
+    end)
   end
 
   def delete_side_effect(agent, effect) do
-    Agent.update(agent, fn effects -> List.delete(effects, effect) end)
+    Agent.update(agent, fn effects ->
+      if effect in effects do
+        List.delete(effects, effect)
+      else
+        raise "Effect not found"
+      end
+    end)
   end
 
   def side_effects(agent) do
@@ -138,24 +150,97 @@ defmodule SageTest do
     assert result == {:ok, :t3, %{step1: :t1, step2: :fallback_return, step3: :t3}}
   end
 
+  test "circuit breaker raises when other stage is failed" do
+    {:ok, agent} = SideEffectAgent.start_link()
+
+    assert_raise RuntimeError, "Circuit breaking is only allowed for continuing compensated transaction", fn ->
+      new()
+      |> run(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> run(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_continue(agent, &1, &2, &3))
+      |> run(:step3, &tx_err(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> execute([a: :b])
+    end
+  end
+
+  test "async txs" do
+    {:ok, agent} = SideEffectAgent.start_link()
+
+    result =
+      new()
+      |> run_async(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> run_async(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> run(:step3, &tx_ok(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> execute([a: :b])
+
+    assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
+    assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
+  end
+
+  test "end with async txs" do
+    {:ok, agent} = SideEffectAgent.start_link()
+
+    result =
+      new()
+      |> run(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> run_async(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> run_async(:step3, &tx_ok(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> execute([a: :b])
+
+    assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
+    assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
+  end
+
+  describe "compensates errors async txs" do
+    test "when error occurrences is after async operation" do
+      {:ok, agent} = SideEffectAgent.start_link()
+
+      result =
+        new()
+        |> run_async(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> run_async(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> run(:step3, &tx_err(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> execute([a: :b])
+
+      assert SideEffectAgent.side_effects(agent) == []
+      assert result == {:error, :t3}
+    end
+
+    test "when error occurrences is on of async operations" do
+      {:ok, agent} = SideEffectAgent.start_link()
+
+      result =
+        new()
+        |> run_async(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> run_async(:step2, &tx_err(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> run_async(:step3, &tx_ok(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+        |> execute([a: :b])
+
+      assert SideEffectAgent.side_effects(agent) == []
+      assert result == {:error, :t2}
+    end
+  end
+
   def tx_ok(agent_pid, tid, effects_so_far, opts) do
     SideEffectAgent.create_side_effect(agent_pid, tid)
     IO.inspect {tid, effects_so_far, opts}, label: "TX: "
     {:ok, tid}
   end
 
-  def tx_abort(_agent_pid, tid, effects_so_far, opts) do
+  def tx_abort(agent_pid, tid, effects_so_far, opts) do
+    SideEffectAgent.create_side_effect(agent_pid, tid)
     IO.inspect {tid, effects_so_far, opts}, label: "TX abort: "
     {:abort, tid}
   end
 
-  def tx_err(_agent_pid, tid, effects_so_far, opts) do
+  def tx_err(agent_pid, tid, effects_so_far, opts) do
+    SideEffectAgent.create_side_effect(agent_pid, tid)
     IO.inspect {tid, effects_so_far, opts}, label: "TX error: "
     {:error, tid}
   end
 
   def tx_err_n_times(agent_pid, counter_pid, tid, effects_so_far, opts) do
     if CountingAgent.get(counter_pid) > 0 do
+      SideEffectAgent.create_side_effect(agent_pid, tid)
       IO.inspect {tid, effects_so_far, opts}, label: "TX error: "
       CountingAgent.dec(counter_pid)
       {:error, tid}
