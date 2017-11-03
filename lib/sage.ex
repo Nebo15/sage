@@ -102,7 +102,7 @@ defmodule Sage do
                              | {:continue, any()} # I am the Circuit Breaker and I know how live wit this error. Can be returned only when operation name == failed operation name
 
   @typep finally :: [{module(), atom(), [any()]}]
-                  | [({:ok | :error, effects_so_far :: effects()} -> no_return)]
+                  | [({:ok | :error} -> no_return)]
 
   @type t :: %__MODULE__{
     operations: [{name(), {:run, transaction(), compensation()} | {:run_async, transaction(), compensation(), timeout()}}],
@@ -155,7 +155,7 @@ defmodule Sage do
   Appends a sage with a function that will be triggered after sage success or abort.
   """
   @spec finally(sage :: t(), callback :: finally()) :: t()
-  def finally(%Sage{} = sage, callback) when is_function(callback, 2),
+  def finally(%Sage{} = sage, callback) when is_function(callback, 1),
     do: %{sage | finally: sage.finally ++ [callback]}
   def finally(%Sage{} = sage, {module, function, arguments})
     when is_atom(module) and is_atom(function) and is_list(arguments),
@@ -176,6 +176,18 @@ defmodule Sage do
     sage.operations
     |> Enum.reverse()
     |> execute_transactions([], opts, {nil, %{}, {0, []}, false, []})
+    |> filanlize(sage.finally)
+  end
+
+  defp filanlize(result, []), do: result
+  defp filanlize(result, filanlize_callbacks) do
+    Enum.map(filanlize_callbacks, fn
+      {module, function, args} ->
+        apply(module, function, [elem(result, 0)] + args)
+      callback ->
+        callback.(elem(result, 0))
+    end)
+    result
   end
 
   defp execute_transactions([{name, operation} | operations], executed_operations, opts, state) do

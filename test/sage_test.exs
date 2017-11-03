@@ -59,6 +59,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
       |> run(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
       |> run(:step3, &tx_ok(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> finally(fn :ok -> :ok end)
       |> execute([a: :b])
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
@@ -73,6 +74,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_ok(agent, &1, &2, &3))
       |> run(:step2, &tx_ok(agent, :t2, &1, &2), &cmp_ok(agent, &1, &2, &3))
       |> run(:step3, &tx_err(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3))
+      |> finally(fn :error -> :results_are_ignored_mmkay end)
       |> execute([a: :b])
 
     assert SideEffectAgent.side_effects(agent) == []
