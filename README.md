@@ -209,7 +209,7 @@ Allow to add `after_transaction`, `before_transaction`, `after_compensation`, `b
 ```elixir
 sage =
   new()
-  |> Sage.with_idempotency(MyIdempotencyAdapter) // or with_persistency()
+  |> with_idempotency(MyIdempotencyAdapter) // or with_persistency()
   |> run(:t1, ..)
   |> run(:t2, ..)
   |> checkpoint() # Ok, result is written to a persistent storage
