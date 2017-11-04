@@ -259,8 +259,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           raise RuntimeError, "Error in transaction #{inspect(tid)}"
         end
@@ -283,8 +282,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           exit "Error in transaction #{inspect(tid)}"
         end
@@ -307,8 +305,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           {:bad_returns, :are_bad_mmkay}
         end
@@ -338,8 +335,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX timeout: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           :timer.sleep(100)
           {:ok, :slowpoke_return}
@@ -363,8 +359,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           raise RuntimeError, "Error in transaction #{inspect(tid)}"
         end
@@ -387,8 +382,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           exit "Error in transaction #{inspect(tid)}"
         end
@@ -411,8 +405,7 @@ defmodule SageTest do
       test_pid = self()
 
       error_callback =
-        fn agent_pid, tid, effects_so_far, opts ->
-          IO.inspect {tid, effects_so_far, opts}, label: "TX raise: "
+        fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
           {:bad_returns, :are_bad_mmkay}
         end
@@ -437,40 +430,47 @@ defmodule SageTest do
       assert SideEffectAgent.side_effects(agent) == []
     end
 
-    test "raise in compensation" do
+    test "raise, exit or unexpected return in compensation" do
+      {:ok, agent} = SideEffectAgent.start_link()
+      test_pid = self()
 
-    end
+      error_callback =
+        fn agent_pid, effect_to_compensate, {name, _reason}, _opts ->
+          SideEffectAgent.delete_side_effect(agent_pid, effect_to_compensate)
+          raise RuntimeError, "Error in transaction #{inspect(name)}"
+        end
 
-    test "exit in compensation" do
+      assert_raise RuntimeError, "Error in transaction :step3", fn ->
+        new()
+        |> run(:step1, &tx_ok(agent, :t1, &1, &2), &cmp_retry(agent, &1, &2, &3))
+        |> run(:step2, &tx_ok(agent, :t2, &1, &2), &error_callback.(agent, &1, &2, &3))
+        |> run_async(:step3, &tx_err(agent, :t3, &1, &2), &cmp_ok(agent, &1, &2, &3, :t3))
+        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> execute([a: :b])
+      end
 
-    end
-
-    test "unexpected return compensation" do
-
+      refute_receive {:finally, :error}
+      assert SideEffectAgent.side_effects(agent) == [:t1]
     end
   end
 
-  def tx_ok(agent_pid, tid, effects_so_far, opts) do
-    IO.inspect {tid, effects_so_far, opts}, label: "TX: "
+  def tx_ok(agent_pid, tid, _effects_so_far, _opts) do
     SideEffectAgent.create_side_effect(agent_pid, tid)
     {:ok, tid}
   end
 
-  def tx_abort(agent_pid, tid, effects_so_far, opts) do
-    IO.inspect {tid, effects_so_far, opts}, label: "TX abort: "
+  def tx_abort(agent_pid, tid, _effects_so_far, _opts) do
     SideEffectAgent.create_side_effect(agent_pid, tid)
     {:abort, tid}
   end
 
-  def tx_err(agent_pid, tid, effects_so_far, opts) do
-    IO.inspect {tid, effects_so_far, opts}, label: "TX error: "
+  def tx_err(agent_pid, tid, _effects_so_far, _opts) do
     SideEffectAgent.create_side_effect(agent_pid, tid)
     {:error, tid}
   end
 
   def tx_err_n_times(agent_pid, counter_pid, tid, effects_so_far, opts) do
     if CountingAgent.get(counter_pid) > 0 do
-      IO.inspect {tid, effects_so_far, opts}, label: "TX error: "
       SideEffectAgent.create_side_effect(agent_pid, tid)
       CountingAgent.dec(counter_pid)
       {:error, tid}
@@ -479,29 +479,25 @@ defmodule SageTest do
     end
   end
 
-  def cmp_ok(agent_pid, effect_to_compensate, {name, reason}, opts, effect_override \\ nil) do
-    IO.inspect {effect_override || effect_to_compensate, {name, reason}, opts}, label: "CMP ok: "
+  def cmp_ok(agent_pid, effect_to_compensate, {_name, _reason}, _opts, effect_override \\ nil) do
     SideEffectAgent.delete_side_effect(agent_pid, effect_override || effect_to_compensate)
     :ok
   end
 
   # I am compensated by transaction, let's retry with this data from my tx
-  def cmp_retry(agent_pid, effect_to_compensate, {name, reason}, opts, limit \\ 3) do
-    IO.inspect {effect_to_compensate, {name, reason}, opts}, label: "CMP retry: "
+  def cmp_retry(agent_pid, effect_to_compensate, {_name, _reason}, _opts, limit \\ 3) do
     SideEffectAgent.delete_side_effect(agent_pid, effect_to_compensate)
     {:retry, [retry_limit: limit]}
   end
 
   # I am compensated transaction and want to force backwards recovery on all steps
-  def cmp_abort(agent_pid, effect_to_compensate, {name, reason}, opts) do
-    IO.inspect {effect_to_compensate, {name, reason}, opts}, label: "CMP abort: "
+  def cmp_abort(agent_pid, effect_to_compensate, {_name, _reason}, _opts) do
     SideEffectAgent.delete_side_effect(agent_pid, effect_to_compensate)
     :abort
   end
 
   # I am the Circuit Breaker and I know how live wit this error
-  def cmp_continue(agent_pid, effect_to_compensate, {name, reason}, opts) do
-    IO.inspect {effect_to_compensate, {name, reason}, opts}, label: "CMP cont: "
+  def cmp_continue(agent_pid, effect_to_compensate, {_name, _reason}, _opts) do
     SideEffectAgent.delete_side_effect(agent_pid, effect_to_compensate)
     {:continue, :fallback_return}
   end
