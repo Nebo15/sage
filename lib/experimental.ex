@@ -3,12 +3,31 @@ defmodule Sage.Experimental do
   This module described experimental features planned for Sage.
   """
 
+  @typep cache_opts :: [{:adapter, module()}]
+
+  @typep retry_opts :: [{:adapter, module()},
+                        {:retry_limit, integer()},
+                        {:retry_timeout, integer()}]
+
+  @doc """
+  Appends sage with an cached transaction and function to compensate it's side effects.
+
+  Cache is stored by calling a `Sage.CacheAdapter` implementation.
+
+      sage
+      |> run_async(:a, tx_cb, cmp_cb)
+      |> run_async(:b, tx_cb, cmp_cb, after: :a)
+      |> run_async(:e, tx_cb, cmp_cb)
+      |> run_async(:c, tx_cb, cmp_cb, after: [:b, :e])
+  """
+  @callback run_async(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: Keyword.t) :: Sage.t()
+
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_cached(sage :: t(), apply :: transaction(), rollback :: compensation(), opts :: cache_opts()) :: t()
+  @callback run_cached(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: cache_opts()) :: Sage.t()
 
   @doc """
   Appends sage with an asynchronous cached transaction and function to compensate it's side effects.
@@ -17,7 +36,7 @@ defmodule Sage.Experimental do
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_async_cached(sage :: t(), apply :: transaction(), rollback :: compensation(), opts :: cache_opts()) :: t()
+  @callback run_async_cached(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: cache_opts()) :: Sage.t()
 
   @doc """
   Appends sage with an checkpoint at which forward retries should occur.
@@ -32,31 +51,19 @@ defmodule Sage.Experimental do
 
   TODO: Rename to retry?
   """
-  @callback checkpoint(sage :: t(), retry_opts :: retry_opts()) :: t()
+  @callback checkpoint(sage :: Sage.t(), retry_opts :: retry_opts()) :: Sage.t()
 
-  @doc """
-  Register function that will handle all critical errors for a compensating functions.
-
-  Internally we will wrap compensation in a try..catch block and handoff error handling to a callback function.
-
-  This allows to implement complex rescuing strategies, eg:
-    - Notify developer about need of manual resolution;
-    - Retries for compensations;
-    - Spin off a compensation process and return an error in the sage.
-    Process can keep retrying to compensate effects by storing sage in state or a persistent storage.
-  """
-  @callback on_compensation_error(sage :: t(), {module(), function(), [any()]}) :: t()
 
   @doc """
   Register persistent adapter and idempotency key generator to make it possible to re-run same requests
   idempotently (by either replying with old success response or continuing from the latest failed Sage transaction).
   """
-  @callback with_idempotency(sage :: t(), adapter :: module()) :: t()
+  @callback with_idempotency(sage :: Sage.t(), adapter :: module()) :: Sage.t()
 
   @doc """
   Concurrently run transaction after it's dependencies.
 
   Would allow to build a dependency tree and run everything with maximum concurrency.
   """
-  @callback run_async_after(sage :: t(), [after_name :: name()], apply :: transaction(), rollback :: compensation()) :: t()
+  @callback run_async_after(sage :: Sage.t(), [after_name :: Sage.name()], apply :: Sage.transaction(), rollback :: Sage.compensation()) :: Sage.t()
 end
