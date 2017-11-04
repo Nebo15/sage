@@ -200,14 +200,25 @@ For making it easier to understand what flow you should expect here are few addi
 
 # RFC's
 
+### Inspecting
+
+Allow to add `after_transaction`, `before_transaction`, `after_compensation`, `before_compensation` callbacks that can share a state and can report metrics on execution flow. They should not affect execution in any way or receive effects from it (except operation name).
+
 ### Idempotency
 
-Sage.new()
-|> Sage.with_idempotency(enabled? \\ true) // or with_persistency()
-|> Sage.do(..) # Ok, result is written to a persistent storage
-|> Sage.do(..) # Ok, result is written
-|> Sage.do(..) # Error, probably nothing to rollback and retry of this sage would continue from this step (state is fetched from DB)
-|> Sage.do(..)
+```elixir
+sage =
+  new()
+  |> Sage.with_idempotency(MyIdempotencyAdapter) // or with_persistency()
+  |> run(:t1, ..)
+  |> run(:t2, ..)
+  |> checkpoint() # Ok, result is written to a persistent storage
+  |> run(:t3, ..) # Fails only for the first time
+
+execute(sage, [attr: "hello world"]) # Returns an error
+
+execute(sage, [attr: "hello world"]) # Would continue from `:t2` by re-using persistent state which is stored as hash over all the arguments (or user-provided).
+```
 
 ### HTTP lib on top of Sage
 
