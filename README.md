@@ -226,6 +226,25 @@ We can leverage dializer?
 
 Integration with property testing would make possible to test your transaction functions and almost automatically make sure Saga is correct for most common scenarios.
 
+#### Caching
+
+Add build-in behaviour and simple cache adapter for caching transaction return.
+
+#### Async dependencies
+
+Allow async operations to optionally specify dependency after which they want to run:
+
+```elixir
+sage
+|> run_async(:a, tx_cb, cmp_cb)
+|> run_async(:b, tx_cb, cmp_cb, after: :a)
+|> run_async(:e, tx_cb, cmp_cb)
+|> run_async(:c, tx_cb, cmp_cb, after: [:b, :e])
+```
+
+To implement this we need a run-time checks for dependency tree to get rid
+of dead ends and recursive dependencies before sage is executed.
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed

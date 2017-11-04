@@ -12,8 +12,6 @@ defmodule Sage.Experimental do
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
 
-  Cache is stored by calling a `Sage.CacheAdapter` implementation.
-
       sage
       |> run_async(:a, tx_cb, cmp_cb)
       |> run_async(:b, tx_cb, cmp_cb, after: :a)
