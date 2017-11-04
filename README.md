@@ -163,11 +163,42 @@ Logging for compensation errors is pretty verbose to drive the attention to the 
 Sage does it's best to make sure final callback is executed even if there is a program bug in the code.
 This guarantee simplifies integration with a job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
 
+# Visualizations
+
+For making it easier to understand what flow you should expect here are few additional examples:
+
+1. Retries
+
+```
+[T1] -> [T2] -> [T3 has an error]
+                ↓
+[C2 retries] <- [C3]
+        ↓
+        [T2] -> [T3]
+```
+
+2. Circuit breaker
+```
+[T1] -> [T2  has an error]
+                ↓
+        [C2 circuit breaker] -> [T3]
+```
+
+2. Async transactions
+```
+[T1] -> [T2 async] -↓
+        [T3 async] -> [await for T2 and T3 before non-async operation] -> [T4]
+```
+
+2. Error in async transaction (notice: both async operations are awaited and then compensated)
+```
+[T1] -> [T2 async with error] -↓
+        [T3 async] -> [await for T2 and T3 before non-async operation]
+                       ↓
+[C1]   <- [C2]   <- [C3]
+```
+
 # RFC's
-
-### Side effects
-
-One side effect per do or allow do's to return `{:ok, result, [side_effects]}` tuple?
 
 ### Idempotency
 
@@ -195,8 +226,6 @@ We can leverage dializer?
 
 Integration with property testing would make possible to test your transaction functions and almost automatically make sure Saga is correct for most common scenarios.
 
-### Ecto.Multi replacement & Database integrations & Runnin saga in Repo.transaction(...)
-
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
@@ -213,7 +242,6 @@ end
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at [https://hexdocs.pm/sage](https://hexdocs.pm/sage).
-
 
 # License
 
