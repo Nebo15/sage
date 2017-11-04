@@ -173,12 +173,12 @@ defmodule Sage do
     when is_atom(module) and is_atom(function) and is_list(arguments),
     do: %{sage | finally: sage.finally ++ [{module, function, arguments}]}
 
-  @doc """
-  Merges another sage or adds a step to call external Module to return a sage to merge at run-time.
-  """
-  @spec merge(sage :: t(), sage :: t() | {module(), function(), [any()]}) :: t()
-  def merge(%Sage{}, %Sage{}), do: raise "not implemented"
-  def merge(%Sage{}, {_m, _f, _a}), do: raise "not implemented"
+  # @doc """
+  # Merges another sage or adds a step to call external Module to return a sage to merge at run-time.
+  # """
+  # @spec merge(sage :: t(), sage :: t() | {module(), function(), [any()]}) :: t()
+  # def merge(%Sage{}, %Sage{}), do: raise "not implemented"
+  # def merge(%Sage{}, {_m, _f, _a}), do: raise "not implemented"
 
   @doc """
   Executes a Sage with global state.
@@ -197,9 +197,9 @@ defmodule Sage do
     status = if elem(result, 0) in [:exit, :raise, :error], do: :error, else: :ok
     Enum.map(filanlize_callbacks, fn
       {module, function, args} ->
-        apply(module, function, [status] + args)
+        apply(module, function, [status | args])
       callback ->
-        callback.(status)
+        apply(callback, [status])
     end)
     result
   end

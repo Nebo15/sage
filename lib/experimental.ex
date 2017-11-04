@@ -19,6 +19,9 @@ defmodule Sage.Experimental do
       |> run_async(:b, tx_cb, cmp_cb, after: :a)
       |> run_async(:e, tx_cb, cmp_cb)
       |> run_async(:c, tx_cb, cmp_cb, after: [:b, :e])
+
+  To implement this we need a run-time checks for dependency tree to get rid
+  of dead ends and recursive dependencies before sage is executed.
   """
   @callback run_async(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: Keyword.t) :: Sage.t()
 
