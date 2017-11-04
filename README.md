@@ -1,5 +1,7 @@
 # Sage
 
+[![Inline docs](http://inch-ci.org/github/Nebo15/sage.svg)](http://inch-ci.org/github/Nebo15/sage)
+
 Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern
 in pure Elixir. It is go to way when you dealing with distributed transactions, especially with
 an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are

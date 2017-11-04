@@ -85,6 +85,7 @@ defmodule Sage do
     |> Sage.to_function(global_state)
     |> Repo.transaction()
   """
+  use Application
 
   @typep name :: atom()
 
@@ -118,6 +119,17 @@ defmodule Sage do
     on_compensation_error: :raise
   ]
 
+  def start(_type, _args) do
+    import Supervisor.Spec, warn: false
+
+    children = [
+      {Task.Supervisor, name: Sage.AsyncTransactionSupervisor}
+    ]
+
+    opts = [strategy: :one_for_one, name: Sage.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+
   @doc """
   Creates a new sage.
   """
@@ -147,9 +159,9 @@ defmodule Sage do
   If there is an error while one or more asynchronous operations are creating transaction,
   Sage will await for them to complete and compensate created effects.
   """
-  @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation()) :: t()
-  def run_async(sage, name, transaction, compensation),
-    do: add_operation(sage, :run_async, name, transaction, compensation)
+  @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation(), opts :: Keyword.t()) :: t()
+  def run_async(sage, name, transaction, compensation, opts \\ []),
+    do: add_operation(sage, :run_async, name, transaction, compensation, opts)
 
   @doc """
   Appends a sage with a function that will be triggered after sage success or abort.
@@ -177,17 +189,28 @@ defmodule Sage do
     |> Enum.reverse()
     |> execute_transactions([], opts, {nil, %{}, {0, []}, false, []})
     |> filanlize(sage.finally)
+    |> return()
   end
 
   defp filanlize(result, []), do: result
   defp filanlize(result, filanlize_callbacks) do
+    status = if elem(result, 0) in [:exit, :raise, :error], do: :error, else: :ok
     Enum.map(filanlize_callbacks, fn
       {module, function, args} ->
-        apply(module, function, [elem(result, 0)] + args)
+        apply(module, function, [status] + args)
       callback ->
-        callback.(elem(result, 0))
+        callback.(status)
     end)
     result
+  end
+
+  defp return(result) do
+    case result do
+      {:ok, effect, other_effects} -> {:ok, effect, other_effects}
+      {:exit, reason} -> exit(reason)
+      {:raise, {exception, stacktrace}} -> reraise(exception, stacktrace)
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp execute_transactions([{name, operation} | operations], executed_operations, opts, state) do
@@ -219,15 +242,32 @@ defmodule Sage do
     state = put_elem(state, 4, [])
 
     tasks
-    |> Enum.map(fn {name, async_job} -> {name, Task.await(async_job)} end)
-    |> Enum.reduce({operation, state}, fn {name, result}, {operation, state} ->
-      case handle_operation_result({name, :async, result, state}) do
-        {:next_operation, {^name, :async}, state} ->
-          {operation, state}
+    |> Enum.map(fn {name, {task, yield_opts}} ->
+      timeout = Keyword.get(yield_opts, :timeout, 5000)
+      case Task.yield(task, timeout) || Task.shutdown(task) do
+        {:ok, result} ->
+          {name, result}
 
-        {:compensate, {^name, :async}, state} ->
-          {:compensate, state}
+        {:exit, {exception, stacktrace}} ->
+          {name, {:raise, {exception, stacktrace}}}
+
+        {:exit, reason} ->
+          {name, {:exit, reason}}
+
+        nil ->
+          message = "asynchronous transaction did not return within the timeout #{to_string(timeout)}"
+          {name, {:raise, {%RuntimeError{message: message}, System.stacktrace()}}}
       end
+    end)
+    |> Enum.reduce({operation, state}, fn
+      {name, result}, {operation, state} ->
+        case handle_operation_result({name, :async, result, state}) do
+          {:next_operation, {^name, :async}, state} ->
+            {operation, state}
+
+          {:compensate, {^name, :async}, state} ->
+            {:compensate, state}
+        end
     end)
   end
 
@@ -238,18 +278,53 @@ defmodule Sage do
     {name, operation, execute_transaction(operation, effects_so_far, opts), state}
   end
 
-  defp execute_transaction({:run, operation, _compensation}, effects_so_far, opts) do
-    apply_transaction_fun(operation, effects_so_far, opts)
+  defp execute_transaction({:run, operation, _compensation, []}, effects_so_far, opts) do
+    try do
+      case apply_transaction_fun(operation, effects_so_far, opts) do
+        {:ok, effect} -> {:ok, effect}
+        {:error, reason} -> {:error, reason}
+        {:abort, reason} -> {:abort, reason}
+        other ->
+          raise RuntimeError, """
+          unexpected return from transaction function #{inspect(operation)},
+          expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+
+            #{inspect(other)}
+          """
+      end
+    rescue
+      exception ->
+        {:raise, {exception, System.stacktrace()}}
+    catch
+      :exit, reason ->
+        {:exit, reason}
+    end
   end
-  defp execute_transaction({:run_async, operation, _compensation}, effects_so_far, opts) do
-    Task.async(fn -> apply_transaction_fun(operation, effects_so_far, opts) end)
+  defp execute_transaction({:run_async, operation, _compensation, tx_opts}, effects_so_far, opts) do
+    task =
+      Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
+        case apply_transaction_fun(operation, effects_so_far, opts) do
+          {:ok, effect} -> {:ok, effect}
+          {:error, reason} -> {:error, reason}
+          {:abort, reason} -> {:abort, reason}
+          other ->
+            raise RuntimeError, """
+            unexpected return from transaction function #{inspect(operation)},
+            expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+
+              #{inspect(other)}
+            """
+        end
+      end)
+
+    {task, tx_opts}
   end
 
   defp handle_operation_result({:compensate, state}),
     do: {:compensate, state}
   defp handle_operation_result({:execute, state}),
     do: {:execute, state}
-  defp handle_operation_result({name, operation, %Task{} = async_job, state}) do
+  defp handle_operation_result({name, operation, {%Task{}, _async_opts} = async_job, state}) do
     {last_effect_or_error, effects_so_far, retries, _abort?, tasks} = state
     state = {last_effect_or_error, effects_so_far, retries, false, [{name, async_job} | tasks]}
     {:next_operation, {name, operation}, state}
@@ -267,6 +342,16 @@ defmodule Sage do
   defp handle_operation_result({name, operation, {:error, reason}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
     state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, false, []}
+    {:compensate, {name, operation}, state}
+  end
+  defp handle_operation_result({name, operation, {:raise, reraise_args}, state}) do
+    {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
+    state = {{:raise, reraise_args}, effects_so_far, retries, true, []}
+    {:compensate, {name, operation}, state}
+  end
+  defp handle_operation_result({name, operation, {:exit, exit_reason}, state}) do
+    {_last_effect_or_error, effects_so_far, retries, _abort?, []} = state
+    state = {{:exit, exit_reason}, effects_so_far, retries, true, []}
     {:compensate, {name, operation}, state}
   end
 
@@ -325,12 +410,17 @@ defmodule Sage do
   end
 
   defp execute_compensations([], _compensated_operations, _opts, state) do
-    {{_name, reason}, _effects_so_far, _retries, _abort?, _tasks} = state
-    {:error, reason}
+    {last_error, %{}, _retries, _abort?, []} = state
+
+    case last_error do
+      {:exit, reason} -> {:exit, reason}
+      {:raise, {exception, stacktrace}} -> {:raise, {exception, stacktrace}}
+      {_name, reason} -> {:error, reason}
+    end
   end
 
-  defp execute_compensation({:run, _operation, :noop}, _effect_to_compensate, _opts, _state), do: :ok
-  defp execute_compensation({_type, _operation, compensation}, effect_to_compensate, opts, state) do
+  defp execute_compensation({:run, _operation, :noop, _tx_opts}, _effect_to_compensate, _opts, _state), do: :ok
+  defp execute_compensation({_type, _operation, compensation, _tx_opts}, effect_to_compensate, opts, state) do
     {{name, reason}, _effects_so_far, _retries, _abort?, _tasks} = state
     apply_compensation_fun(compensation, effect_to_compensate, {name, reason}, opts)
   end
@@ -352,7 +442,7 @@ defmodule Sage do
   def to_function(%Sage{} = sage, opts),
     do: fn -> execute(sage, opts) end
 
-  defp add_operation(%Sage{} = sage, type, name, transaction, compensation)
+  defp add_operation(%Sage{} = sage, type, name, transaction, compensation, opts \\ [])
       when is_atom(name)
        and (is_function(transaction, 2) or is_tuple(transaction) and tuple_size(transaction) == 3)
        and (is_function(compensation, 3) or is_tuple(compensation) and tuple_size(compensation) == 3 or compensation == :noop) do
@@ -360,7 +450,7 @@ defmodule Sage do
     if MapSet.member?(names, name) do
       raise "#{inspect name} is already a member of the Sage: \n#{inspect(sage)}"
     else
-      %{sage | operations: [{name, {type, transaction, compensation}} | operations],
+      %{sage | operations: [{name, {type, transaction, compensation, opts}} | operations],
                operation_names: MapSet.put(names, name)}
     end
   end
