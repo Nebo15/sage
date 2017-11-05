@@ -10,10 +10,10 @@ defmodule Sage.Mixfile do
       package: package(),
       version: @version,
       elixir: "~> 1.5",
-      elixirc_paths: elixirc_paths(Mix.env),
-      compilers: [] ++ Mix.compilers,
-      build_embedded: Mix.env == :prod,
-      start_permanent: Mix.env == :prod,
+      elixirc_paths: elixirc_paths(Mix.env()),
+      compilers: [] ++ Mix.compilers(),
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
       deps: deps(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [coveralls: :test],
@@ -23,7 +23,7 @@ defmodule Sage.Mixfile do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_),     do: ["lib"]
+  defp elixirc_paths(_), do: ["lib"]
 
   def application do
     [
@@ -51,6 +51,6 @@ defmodule Sage.Mixfile do
       licenses: ["MIT"],
       links: %{github: "https://github.com/Nebo15/annon.api"},
       files: ~w(lib LICENSE.md mix.exs README.md)
-   ]
+    ]
   end
 end

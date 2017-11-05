@@ -4,9 +4,7 @@ defmodule Sage.Experimental do
   """
   @typep cache_opts :: [{:adapter, module()}]
 
-  @typep retry_opts :: [{:adapter, module()},
-                        {:retry_limit, integer()},
-                        {:retry_timeout, integer()}]
+  @typep retry_opts :: [{:adapter, module()}, {:retry_limit, integer()}, {:retry_timeout, integer()}]
 
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
@@ -20,20 +18,24 @@ defmodule Sage.Experimental do
   To implement this we need a run-time checks for dependency tree to get rid
   of dead ends and recursive dependencies before sage is executed.
   """
-  @callback run_async(sage :: Sage.t(),
-                      apply :: Sage.transaction(),
-                      rollback :: Sage.compensation(),
-                      opts :: Keyword.t) :: Sage.t()
+  @callback run_async(
+              sage :: Sage.t(),
+              apply :: Sage.transaction(),
+              rollback :: Sage.compensation(),
+              opts :: Keyword.t()
+            ) :: Sage.t()
 
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_cached(sage :: Sage.t(),
-                       apply :: Sage.transaction(),
-                       rollback :: Sage.compensation(),
-                       opts :: cache_opts()) :: Sage.t()
+  @callback run_cached(
+              sage :: Sage.t(),
+              apply :: Sage.transaction(),
+              rollback :: Sage.compensation(),
+              opts :: cache_opts()
+            ) :: Sage.t()
 
   @doc """
   Appends sage with an asynchronous cached transaction and function to compensate it's side effects.
@@ -42,17 +44,21 @@ defmodule Sage.Experimental do
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_async_cached(sage :: Sage.t(),
-                             apply :: Sage.transaction(),
-                             rollback :: Sage.compensation(),
-                             opts :: cache_opts()) :: Sage.t()
+  @callback run_async_cached(
+              sage :: Sage.t(),
+              apply :: Sage.transaction(),
+              rollback :: Sage.compensation(),
+              opts :: cache_opts()
+            ) :: Sage.t()
 
   @doc """
   Appends sage with an checkpoint at which forward retries should occur.
 
   Internally this is the same as using:
 
-      |> run(fn _ -> {:ok, :noop}, fn state -> if adapter.retry?(state, retry_opts) do {:retry, state} else {:ok, state} end)
+      retry_adapter = fn state -> if adapter.retry?(state, retry_opts) do {:retry, state} else {:ok, state} end
+
+      |> run(fn _ -> {:ok, :noop}, retry_adapter)
 
   TODO: Also can be used as point of synchronization, eg.
     - to persist temporary state in a DB to idempotently retry it;
@@ -61,7 +67,6 @@ defmodule Sage.Experimental do
   TODO: Rename to retry?
   """
   @callback checkpoint(sage :: Sage.t(), retry_opts :: retry_opts()) :: Sage.t()
-
 
   @doc """
   Register persistent adapter and idempotency key generator to make it possible to re-run same requests

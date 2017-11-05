@@ -50,6 +50,7 @@ defmodule Sage.DuplicateOperationError do
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
     name = Keyword.fetch!(opts, :name)
+
     message = """
     #{inspect(name)} is already a member of the Sage:
 

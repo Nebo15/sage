@@ -129,11 +129,13 @@ defmodule Sage do
 
   It's the developer responsibility to match operation name and failed operation name.
   """
-  @type compensation :: (effect_to_compensate() :: any(),
-                         {operation_operation_name :: name(), failed_value :: any()},
-                         execute_opts :: any() -> :ok | :abort | {:retry, Keyword.t()} | {:continue, any()})
-                      | :noop
-                      | mfa()
+  @type compensation ::
+          (effect_to_compensate() :: any(),
+           {operation_operation_name :: name(), failed_value :: any()},
+           execute_opts :: any() ->
+             :ok | :abort | {:retry, Keyword.t()} | {:continue, any()})
+          | :noop
+          | mfa()
   @typedoc """
   Final callback.
 
@@ -158,18 +160,16 @@ defmodule Sage do
   @typep operation :: {:run, transaction(), compensation()} | {:run_async, transaction(), compensation(), async_opts()}
 
   @type t :: %__MODULE__{
-    operations: [{name(), operation()}],
-    operation_names: MapSet.t(),
-    finally: [finally()],
-    on_compensation_error: :raise | module()
-  }
+          operations: [{name(), operation()}],
+          operation_names: MapSet.t(),
+          finally: [finally()],
+          on_compensation_error: :raise | module()
+        }
 
-  defstruct [
-    operations: [],
-    operation_names: MapSet.new(),
-    finally: [],
-    on_compensation_error: :raise
-  ]
+  defstruct operations: [],
+            operation_names: MapSet.new(),
+            finally: [],
+            on_compensation_error: :raise
 
   @doc false
   def start(_type, _args) do
@@ -187,8 +187,7 @@ defmodule Sage do
   Creates a new sage.
   """
   @spec new() :: t()
-  def new,
-    do: %Sage{}
+  def new, do: %Sage{}
 
   @doc """
   Register error handler for compensation function.
@@ -202,6 +201,7 @@ defmodule Sage do
       adapter for compensation error handing is not defined
       or does not implement handle_error/2 function
       """
+
       raise ArgumentError, message
     end
 
@@ -217,8 +217,7 @@ defmodule Sage do
   If transaction does not produce effects to compensate, pass `:noop` instead of compensation callback.
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation()) :: t()
-  def run(sage, name, transaction, compensation),
-    do: add_operation(sage, :run, name, transaction, compensation)
+  def run(sage, name, transaction, compensation), do: add_operation(sage, :run, name, transaction, compensation)
 
   @doc """
   Appends sage with an transaction that does not have side effects.
@@ -229,8 +228,7 @@ defmodule Sage do
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction()) :: t()
-  def run(sage, name, transaction),
-    do: add_operation(sage, :run, name, transaction, :noop)
+  def run(sage, name, transaction), do: add_operation(sage, :run, name, transaction, :noop)
 
   @doc """
   Appends sage with an asynchronous transaction and function to compensate it's effects.
@@ -248,11 +246,8 @@ defmodule Sage do
     * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
     `:infinity` will wait indefinitely (default: 5000);
   """
-  @spec run_async(sage :: t(),
-                  name :: name(),
-                  apply :: transaction(),
-                  rollback :: compensation(),
-                  opts :: async_opts()) :: t()
+  @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation(), opts :: async_opts()) ::
+          t()
   def run_async(sage, name, transaction, compensation, opts \\ []),
     do: add_operation(sage, :run_async, name, transaction, compensation, opts)
 
@@ -262,11 +257,11 @@ defmodule Sage do
   For callback specification see `t:finally/0`.
   """
   @spec finally(sage :: t(), callback :: finally()) :: t()
-  def finally(%Sage{} = sage, callback) when is_function(callback, 2),
-    do: %{sage | finally: sage.finally ++ [callback]}
+  def finally(%Sage{} = sage, callback) when is_function(callback, 2), do: %{sage | finally: sage.finally ++ [callback]}
+
   def finally(%Sage{} = sage, {module, function, arguments})
-    when is_atom(module) and is_atom(function) and is_list(arguments),
-    do: %{sage | finally: sage.finally ++ [{module, function, arguments}]}
+      when is_atom(module) and is_atom(function) and is_list(arguments),
+      do: %{sage | finally: sage.finally ++ [{module, function, arguments}]}
 
   @doc """
   Executes a Sage.
@@ -303,20 +298,22 @@ defmodule Sage do
   Wraps `execute/2` into anonymous function to be run in a Repo transaction.
   """
   @spec to_function(sage :: t(), opts :: Keyword.t()) :: function()
-  def to_function(%Sage{} = sage, opts),
-    do: fn -> execute(sage, opts) end
+  def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
 
   defp add_operation(%Sage{} = sage, type, name, transaction, compensation, opts \\ [])
-      when is_atom(name)
-       and (is_function(transaction, 2) or is_tuple(transaction) and tuple_size(transaction) == 3)
-       and (is_function(compensation, 3) or is_tuple(compensation) and tuple_size(compensation) == 3
-            or compensation == :noop) do
+       when is_atom(name) and (is_function(transaction, 2) or (is_tuple(transaction) and tuple_size(transaction) == 3)) and
+              (is_function(compensation, 3) or (is_tuple(compensation) and tuple_size(compensation) == 3) or
+                 compensation == :noop) do
     %{operations: operations, operation_names: names} = sage
+
     if MapSet.member?(names, name) do
       raise Sage.DuplicateOperationError, sage: sage, name: name
     else
-      %{sage | operations: [{name, {type, transaction, compensation, opts}} | operations],
-               operation_names: MapSet.put(names, name)}
+      %{
+        sage
+        | operations: [{name, {type, transaction, compensation, opts}} | operations],
+          operation_names: MapSet.put(names, name)
+      }
     end
   end
 end

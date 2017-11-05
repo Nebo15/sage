@@ -1,6 +1,6 @@
 defmodule CountingAgent do
   def start_link(initial) do
-    Agent.start_link fn -> initial end
+    Agent.start_link(fn -> initial end)
   end
 
   def inc(agent) do
@@ -18,15 +18,15 @@ end
 
 defmodule SideEffectAgent do
   def start_link do
-    Agent.start_link fn -> [] end
+    Agent.start_link(fn -> [] end)
   end
 
   def create_side_effect(agent, effect) do
     Agent.update(agent, fn effects ->
-      if effect not in effects do
-        [effect | effects]
-      else
+      if effect in effects do
         raise "Trying to re-apply stale effect"
+      else
+        [effect | effects]
       end
     end)
   end
@@ -60,7 +60,7 @@ defmodule SageTest do
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
       |> finally(fn :ok, [a: :b] -> :ok end)
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
     assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
@@ -75,7 +75,7 @@ defmodule SageTest do
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
       |> finally(fn :ok, [a: :b] -> :ok end)
-      |> to_function([a: :b])
+      |> to_function(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
 
@@ -93,7 +93,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> finally(&{send(test_pid, &1), &2})
       |> finally({__MODULE__, :do_send, [test_pid]})
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert_receive :ok
     assert_receive :ok
@@ -110,7 +110,7 @@ defmodule SageTest do
     result =
       new()
       |> run(:step1, &tx_ok(&1, &2, agent, :t1))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1]
     assert result == {:ok, :t1, %{step1: :t1}}
@@ -120,6 +120,7 @@ defmodule SageTest do
     {:ok, agent} = SideEffectAgent.start_link()
 
     message = ~r":step1 is already a member of the Sage:"
+
     assert_raise Sage.DuplicateOperationError, message, fn ->
       new()
       |> run(:step1, &tx_ok(&1, &2, agent, :t1))
@@ -133,7 +134,7 @@ defmodule SageTest do
     result =
       new()
       |> run(:step1, {__MODULE__, :tx_err, [agent, :t1]}, {__MODULE__, :cmp_ok, [agent]})
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t1}
@@ -148,7 +149,7 @@ defmodule SageTest do
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
       |> finally(fn :error, _opts -> :results_are_ignored_mmkay end)
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t3}
@@ -162,7 +163,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_err(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t2}
@@ -177,7 +178,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_err_n_times(&1, &2, agent, counter, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
     assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
@@ -191,7 +192,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_retry(&1, &2, &3, agent, 3))
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t3}
@@ -205,7 +206,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_abort(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t3}
@@ -219,7 +220,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent, 1000))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_abort(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == []
     assert result == {:error, :t3}
@@ -233,7 +234,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_err(&1, &2, agent, :t2), &cmp_continue(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t3]
     assert result == {:ok, :t3, %{step1: :t1, step2: :fallback_return, step3: :t3}}
@@ -266,7 +267,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_continue(&1, &2, &3, agent))
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
     end
   end
 
@@ -278,7 +279,7 @@ defmodule SageTest do
       |> run_async(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run_async(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
     assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
@@ -292,7 +293,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run_async(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run_async(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> execute([a: :b])
+      |> execute(a: :b)
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
     assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
@@ -307,7 +308,7 @@ defmodule SageTest do
         |> run_async(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-        |> execute([a: :b])
+        |> execute(a: :b)
 
       assert SideEffectAgent.side_effects(agent) == []
       assert result == {:error, :t3}
@@ -321,7 +322,7 @@ defmodule SageTest do
         |> run_async(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step2, &tx_err(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-        |> execute([a: :b])
+        |> execute(a: :b)
 
       assert SideEffectAgent.side_effects(agent) == []
       assert result == {:error, :t2}
@@ -337,7 +338,7 @@ defmodule SageTest do
         |> run_async(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_abort(&1, &2, &3, agent))
         |> run_async(:step3, &tx_err(&1, &2, agent, :t3), &cmp_retry(&1, &2, &3, agent))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
 
       assert_receive {:finally, :error}
       assert SideEffectAgent.side_effects(agent) == []
@@ -362,7 +363,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       assert_receive {:finally, :error}
@@ -376,17 +377,17 @@ defmodule SageTest do
       error_callback =
         fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
-          exit "Error in transaction #{inspect(tid)}"
+          exit("Error in transaction #{inspect(tid)}")
         end
 
       assert catch_exit(
-        new()
-        |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
-        |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
-        |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
-      ) == "Error in transaction :t3"
+               new()
+               |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
+               |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
+               |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
+               |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
+               |> execute(a: :b)
+             ) == "Error in transaction :t3"
 
       assert_receive {:finally, :error}
       assert SideEffectAgent.side_effects(agent) == []
@@ -415,7 +416,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       assert_receive {:finally, :error}
@@ -444,7 +445,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3), timeout: 10)
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       assert_receive {:finally, :error}
@@ -467,7 +468,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       assert_receive {:finally, :error}
@@ -481,17 +482,17 @@ defmodule SageTest do
       error_callback =
         fn agent_pid, tid, _effects_so_far, _opts ->
           SideEffectAgent.create_side_effect(agent_pid, tid)
-          exit "Error in transaction #{inspect(tid)}"
+          exit("Error in transaction #{inspect(tid)}")
         end
 
       assert catch_exit(
-        new()
-        |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
-        |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
-        |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
-      ) == "Error in transaction :t3"
+               new()
+               |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
+               |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
+               |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
+               |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
+               |> execute(a: :b)
+             ) == "Error in transaction :t3"
 
       assert_receive {:finally, :error}
       assert SideEffectAgent.side_effects(agent) == []
@@ -520,7 +521,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       assert_receive {:finally, :error}
@@ -543,7 +544,7 @@ defmodule SageTest do
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &error_callback.(agent, &1, &2, &3))
         |> run_async(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent, :t3))
         |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
-        |> execute([a: :b])
+        |> execute(a: :b)
       end
 
       refute_receive {:finally, :error}
