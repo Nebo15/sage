@@ -59,7 +59,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> finally(fn :ok -> :ok end)
+      |> finally(fn :ok, [a: :b] -> :ok end)
       |> execute([a: :b])
 
     assert SideEffectAgent.side_effects(agent) == [:t1, :t2, :t3]
@@ -74,7 +74,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_ok(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> finally(fn :ok -> :ok end)
+      |> finally(fn :ok, [a: :b] -> :ok end)
       |> to_function([a: :b])
 
     assert SideEffectAgent.side_effects(agent) == []
@@ -91,7 +91,7 @@ defmodule SageTest do
     result =
       new()
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
-      |> finally(&send(test_pid, &1))
+      |> finally(&{send(test_pid, &1), &2})
       |> finally({__MODULE__, :do_send, [test_pid]})
       |> execute([a: :b])
 
@@ -102,7 +102,7 @@ defmodule SageTest do
     assert result == {:ok, :t1, %{step1: :t1}}
   end
 
-  def do_send(msg, pid), do: send(pid, msg)
+  def do_send(msg, _opts, pid), do: send(pid, msg)
 
   test "accepts side-effects free transactions" do
     {:ok, agent} = SideEffectAgent.start_link()
@@ -147,7 +147,7 @@ defmodule SageTest do
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
-      |> finally(fn :error -> :results_are_ignored_mmkay end)
+      |> finally(fn :error, _opts -> :results_are_ignored_mmkay end)
       |> execute([a: :b])
 
     assert SideEffectAgent.side_effects(agent) == []
@@ -336,7 +336,7 @@ defmodule SageTest do
         |> run_async(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run_async(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_abort(&1, &2, &3, agent))
         |> run_async(:step3, &tx_err(&1, &2, agent, :t3), &cmp_retry(&1, &2, &3, agent))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
 
       assert_receive {:finally, :error}
@@ -361,7 +361,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 
@@ -384,7 +384,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       ) == "Error in transaction :t3"
 
@@ -414,7 +414,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 
@@ -443,7 +443,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3), timeout: 10)
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 
@@ -466,7 +466,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 
@@ -489,7 +489,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       ) == "Error in transaction :t3"
 
@@ -519,7 +519,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
         |> run_async(:step3, &error_callback.(agent, :t3, &1, &2), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 
@@ -542,7 +542,7 @@ defmodule SageTest do
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &error_callback.(agent, &1, &2, &3))
         |> run_async(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent, :t3))
-        |> finally(fn :error -> send(test_pid, {:finally, :error}) end)
+        |> finally(fn :error, _opts -> send(test_pid, {:finally, :error}) end)
         |> execute([a: :b])
       end
 

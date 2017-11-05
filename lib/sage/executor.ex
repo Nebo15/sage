@@ -4,23 +4,25 @@ defmodule Sage.Executor do
   """
 
   @doc false
-  @spec execute(sage :: Sage.t(), opts :: any()) :: Sage.return()
+  @spec execute(sage :: Sage.t(), opts :: any()) :: {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
   def execute(%Sage{} = sage, opts) do
     sage.operations
     |> Enum.reverse()
     |> execute_transactions([], opts, {nil, %{}, {0, []}, false, []})
-    |> filanlize(sage.finally)
+    |> filanlize(sage.finally, opts)
     |> return()
   end
 
-  defp filanlize(result, []), do: result
-  defp filanlize(result, filanlize_callbacks) do
+  defp filanlize(result, [], _opts), do: result
+  defp filanlize(result, filanlize_callbacks, opts) do
     status = if elem(result, 0) == :ok, do: :ok, else: :error
+    # TODO: What if finalize raises an error?
+    # credo:disable-for-lines:6
     Enum.map(filanlize_callbacks, fn
       {module, function, args} ->
-        apply(module, function, [status | args])
+        apply(module, function, [status, opts | args])
       callback ->
-        apply(callback, [status])
+        apply(callback, [status, opts])
     end)
     result
   end

@@ -2,7 +2,6 @@ defmodule Sage.Experimental do
   @moduledoc """
   This module described experimental features planned for Sage.
   """
-
   @typep cache_opts :: [{:adapter, module()}]
 
   @typep retry_opts :: [{:adapter, module()},
@@ -21,14 +20,20 @@ defmodule Sage.Experimental do
   To implement this we need a run-time checks for dependency tree to get rid
   of dead ends and recursive dependencies before sage is executed.
   """
-  @callback run_async(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: Keyword.t) :: Sage.t()
+  @callback run_async(sage :: Sage.t(),
+                      apply :: Sage.transaction(),
+                      rollback :: Sage.compensation(),
+                      opts :: Keyword.t) :: Sage.t()
 
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_cached(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: cache_opts()) :: Sage.t()
+  @callback run_cached(sage :: Sage.t(),
+                       apply :: Sage.transaction(),
+                       rollback :: Sage.compensation(),
+                       opts :: cache_opts()) :: Sage.t()
 
   @doc """
   Appends sage with an asynchronous cached transaction and function to compensate it's side effects.
@@ -37,7 +42,10 @@ defmodule Sage.Experimental do
 
   Cache is stored by calling a `Sage.CacheAdapter` implementation.
   """
-  @callback run_async_cached(sage :: Sage.t(), apply :: Sage.transaction(), rollback :: Sage.compensation(), opts :: cache_opts()) :: Sage.t()
+  @callback run_async_cached(sage :: Sage.t(),
+                             apply :: Sage.transaction(),
+                             rollback :: Sage.compensation(),
+                             opts :: cache_opts()) :: Sage.t()
 
   @doc """
   Appends sage with an checkpoint at which forward retries should occur.
@@ -60,11 +68,4 @@ defmodule Sage.Experimental do
   idempotently (by either replying with old success response or continuing from the latest failed Sage transaction).
   """
   @callback with_idempotency(sage :: Sage.t(), adapter :: module()) :: Sage.t()
-
-  @doc """
-  Concurrently run transaction after it's dependencies.
-
-  Would allow to build a dependency tree and run everything with maximum concurrency.
-  """
-  @callback run_async_after(sage :: Sage.t(), [after_name :: Sage.name()], apply :: Sage.transaction(), rollback :: Sage.compensation()) :: Sage.t()
 end

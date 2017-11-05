@@ -17,7 +17,8 @@ defmodule Sage.Mixfile do
       deps: deps(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [coveralls: :test],
-      docs: [source_ref: "v#\{@version\}", main: "readme", extras: ["README.md"]]
+      docs: [source_ref: "v#\{@version\}", main: "readme", extras: ["README.md"]],
+      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"]
     ]
   end
 
