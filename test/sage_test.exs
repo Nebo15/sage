@@ -119,7 +119,8 @@ defmodule SageTest do
   test "raises on duplicated names" do
     {:ok, agent} = SideEffectAgent.start_link()
 
-    assert_raise RuntimeError, ~r":step1 is already a member of the Sage:", fn ->
+    message = ~r":step1 is already a member of the Sage:"
+    assert_raise Sage.DuplicateOperationError, message, fn ->
       new()
       |> run(:step1, &tx_ok(&1, &2, agent, :t1))
       |> run(:step1, &tx_ok(&1, &2, agent, :t1))
@@ -241,7 +242,26 @@ defmodule SageTest do
   test "circuit breaker raises when other stage is failed" do
     {:ok, agent} = SideEffectAgent.start_link()
 
-    assert_raise RuntimeError, "Circuit breaking is only allowed for continuing compensated transaction", fn ->
+    message = """
+    Compensation step2 tried to apply circuit
+    breaker on a failure which occurred on transaction
+    step3 which it is not responsible for.
+
+    If you trying to implement circuit breaker, always match for a
+    failed operation name in compensating function:
+
+    compensation =
+      fn
+        effect_to_compensate, {:my_step, _failure_reason}, _opts ->
+          # 1. Compensate the side effect
+          # 2. Continue with circuit breaker
+
+        effect_to_compensate, {_not_my_step, _failure_reason}, _opts ->
+          # Compensate the side effect
+      end
+    """
+
+    assert_raise Sage.UnexpectedCircuitBreakError, message, fn ->
       new()
       |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_ok(&1, &2, &3, agent))
       |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_continue(&1, &2, &3, agent))
@@ -383,13 +403,13 @@ defmodule SageTest do
         end
 
       message = ~r"""
-      ^unexpected return from transaction function .*,
+      ^unexpected return from transaction .*,
       expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
         {:bad_returns, :are_bad_mmkay}$
       """
 
-      assert_raise RuntimeError, message, fn ->
+      assert_raise Sage.MalformedTransactionReturnError, message, fn ->
         new()
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
@@ -413,7 +433,12 @@ defmodule SageTest do
           {:ok, :slowpoke_return}
         end
 
-      assert_raise RuntimeError, "asynchronous transaction did not return within the timeout 10", fn ->
+      message = """
+      asynchronous transaction for operation step3 timed out,
+      expected it to return within 10 microseconds
+      """
+
+      assert_raise Sage.AsyncTransactionTimeoutError, message, fn ->
         new()
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
@@ -483,13 +508,13 @@ defmodule SageTest do
         end
 
       message = ~r"""
-      ^unexpected return from transaction function .*,
+      ^unexpected return from transaction (.*),
       expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
-        {:bad_returns, :are_bad_mmkay}$
+        {:bad_returns, :are_bad_mmkay}
       """
 
-      assert_raise RuntimeError, message, fn ->
+      assert_raise Sage.MalformedTransactionReturnError, message, fn ->
         new()
         |> run(:step1, &tx_ok(&1, &2, agent, :t1), &cmp_retry(&1, &2, &3, agent))
         |> run(:step2, &tx_ok(&1, &2, agent, :t2), &cmp_ok(&1, &2, &3, agent))
