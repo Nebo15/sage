@@ -21,53 +21,13 @@ defmodule Sage.Adapters.DefensiveRecursion do
     |> return_or_raise()
   end
 
-  defp maybe_call_final_hooks(result, [], _opts), do: result
-
-  defp maybe_call_final_hooks(result, filanlize_callbacks, opts) do
-    status = if elem(result, 0) == :ok, do: :ok, else: :error
-    # TODO: What if finalize raises an error?
-    # credo:disable-for-lines:6
-    filanlize_callbacks
-    |> Enum.map(fn
-      {module, function, args} ->
-        args = [status, opts | args]
-        {{module, function, args}, apply_and_resque_errors(module, function, args)}
-      callback ->
-        args = [status, opts]
-        {{callback, args}, apply_and_resque_errors(callback, args)}
-    end)
-    |> Enum.map(&maybe_log_errors/1)
-
-    result
-  end
-
-  defp maybe_log_errors({from, {:raise, {exception, stacktrace}}}) do
-    Logger.error("""
-    [Sage] final hook exception from #{callback_to_string(from)} is ignored:
-
-      #{Exception.format(:error, exception, stacktrace)}
-    """)
-  end
-  defp maybe_log_errors({from, {:exit, reason}}) do
-    Logger.error("[Sage] final hook exit from #{callback_to_string(from)} is ignored. Exit reason: #{inspect(reason)}")
-  end
-  defp maybe_log_errors({_from, _other}), do: :ok
-
-  defp callback_to_string({m, f, a}), do: "#{to_string(m)}.#{to_string(f)}/#{to_string(length(a))}"
-  defp callback_to_string({f, _a}), do: inspect(f)
-
-  defp return_or_raise({:ok, effect, other_effects}), do: {:ok, effect, other_effects}
-  defp return_or_raise({:exit, reason}), do: exit(reason)
-  defp return_or_raise({:raise, {exception, stacktrace}}), do: reraise(exception, stacktrace)
-  defp return_or_raise({:error, reason}), do: {:error, reason}
-
   defp execute_transactions([], executed_operations, opts, state) do
     {last_effect, effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
 
     if tasks == [] do
       {:ok, last_effect, effects_so_far}
     else
-      {:execute, state}
+      {:next_transaction, state}
       |> maybe_await_for_tasks(tasks)
       |> handle_operation_result()
       |> execute_next_operation([], executed_operations, opts) # TODO: Do actual return in execute_next_operation?
@@ -116,15 +76,15 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp handle_task_result({name, result}, {operation_or_command, state}) do
     case handle_operation_result({name, :async, result, state}) do
-      {:execute, {^name, :async}, state} ->
+      {:next_transaction, {^name, :async}, state} ->
         {operation_or_command, state}
 
-      {:compensate, {^name, :async}, state} ->
-        {:compensate, state}
+      {:start_compensations, {^name, :async}, state} ->
+        {:start_compensations, state}
     end
   end
 
-  defp maybe_execute_transaction({:compensate, state}, _opts), do: {:compensate, state}
+  defp maybe_execute_transaction({:start_compensations, state}, _opts), do: {:start_compensations, state}
 
   defp maybe_execute_transaction({{name, operation}, state}, opts) do
     {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, _tracers} = state
@@ -156,6 +116,9 @@ defmodule Sage.Adapters.DefensiveRecursion do
     {task, tx_opts}
   end
 
+  defp apply_transaction_fun({mod, fun, args}, effects_so_far, opts), do: apply(mod, fun, [effects_so_far, opts | args])
+  defp apply_transaction_fun(fun, effects_so_far, opts), do: apply(fun, [effects_so_far, opts])
+
   defp validate_transaction_return!({:ok, effect}, _transaction), do: {:ok, effect}
   defp validate_transaction_return!({:error, reason}, _transaction), do: {:error, reason}
   defp validate_transaction_return!({:abort, reason}, _transaction), do: {:abort, reason}
@@ -164,43 +127,43 @@ defmodule Sage.Adapters.DefensiveRecursion do
     {:raise, {%Sage.MalformedTransactionReturnError{transaction: transaction, return: other}, System.stacktrace()}}
   end
 
-  defp handle_operation_result({:compensate, state}), do: {:compensate, state}
-  defp handle_operation_result({:execute, state}), do: {:execute, state}
+  defp handle_operation_result({:start_compensations, state}), do: {:start_compensations, state}
+  defp handle_operation_result({:next_transaction, state}), do: {:next_transaction, state}
 
   defp handle_operation_result({name, operation, {%Task{}, _async_opts} = async_job, state}) do
     {last_effect_or_error, effects_so_far, retries, _abort?, tasks, on_compensation_error, tracers} = state
     state = {last_effect_or_error, effects_so_far, retries, false, [{name, async_job} | tasks], on_compensation_error, tracers}
-    {:execute, {name, operation}, state}
+    {:next_transaction, {name, operation}, state}
   end
 
   defp handle_operation_result({name, operation, {:ok, effect}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
     state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
-    {:execute, {name, operation}, state}
+    {:next_transaction, {name, operation}, state}
   end
 
   defp handle_operation_result({name, operation, {:abort, reason}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
     state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, true, [], on_compensation_error, tracers}
-    {:compensate, {name, operation}, state}
+    {:start_compensations, {name, operation}, state}
   end
 
   defp handle_operation_result({name, operation, {:error, reason}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
     state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, false, [], on_compensation_error, tracers}
-    {:compensate, {name, operation}, state}
+    {:start_compensations, {name, operation}, state}
   end
 
   defp handle_operation_result({name, operation, {:raise, reraise_args}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
     state = {{:raise, reraise_args}, effects_so_far, retries, true, [], on_compensation_error, tracers}
-    {:compensate, {name, operation}, state}
+    {:start_compensations, {name, operation}, state}
   end
 
   defp handle_operation_result({name, operation, {:exit, exit_reason}, state}) do
     {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
     state = {{:exit, exit_reason}, effects_so_far, retries, true, [], on_compensation_error, tracers}
-    {:compensate, {name, operation}, state}
+    {:start_compensations, {name, operation}, state}
   end
 
   defp execute_compensations(compensated_operations, [{name, operation} | operations], opts, state) do
@@ -223,58 +186,33 @@ defmodule Sage.Adapters.DefensiveRecursion do
   end
 
   defp handle_compensation_result({name, operation, :ok, state}) do
-    {:continue_compensate, {name, operation}, state}
+    {:next_compensation, {name, operation}, state}
   end
   defp handle_compensation_result({name, operation, :abort, state}) do
     state = put_elem(state, 3, true)
-    {:continue_compensate, {name, operation}, state}
+    {:next_compensation, {name, operation}, state}
   end
   defp handle_compensation_result({name, operation, {:retry, _retry_opts}, {_last_error, _effects_so_far, _retries, true, [], _on_compensation_error, _tracers} = state}) do
-    {:continue_compensate, {name, operation}, state}
+    {:next_compensation, {name, operation}, state}
   end
   defp handle_compensation_result({name, operation, {:retry, retry_opts}, {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state}) do
     if Keyword.fetch!(retry_opts, :retry_limit) > count do
       state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, [], on_compensation_error, tracers}
-      {:now_execute, {name, operation}, state}
+      {:retry_transaction, {name, operation}, state}
     else
-      {:continue_compensate, {name, operation}, state}
+      {:next_compensation, {name, operation}, state}
     end
   end
   defp handle_compensation_result({name, operation, {:continue, effect}, {{name, _return_reason}, effects_so_far, retries, false, [], on_compensation_error, tracers}}) do
     state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
-    {:execute, {name, operation}, state}
+    {:next_transaction, {name, operation}, state}
   end
   defp handle_compensation_result({name, operation, {:continue, _effect}, state}) do
     {{return_name, _return_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
-    exception = {:raise, {%Sage.UnexpectedCircuitBreakError{compensation_name: name, failed_transaction_name: return_name}, System.stacktrace()}}
-    state = {exception, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
-    {:continue_compensate, {name, operation}, state}
-  end
-
-  defp execute_next_operation({:execute, {name, operation}, state}, operations, executed_operations, opts) do
-    execute_transactions(operations, [{name, operation} | executed_operations], opts, state)
-  end
-
-  defp execute_next_operation({:execute, state}, [], [{prev_name, _prev_operation} | executed_operations], opts) do
-    {_last_effect_or_error, effects_so_far, _retries, _abort?, [], _on_compensation_error, _tracers} = state
-    state = put_elem(state, 0, Map.get(effects_so_far, prev_name))
-    execute_transactions([], executed_operations, opts, state)
-  end
-
-  defp execute_next_operation({:compensate, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_compensations(compensated_operations, [{name, operation} | operations], opts, state)
-  end
-
-  defp execute_next_operation({:compensate, state}, compensated_operations, operations, opts) do
-    execute_compensations(compensated_operations, operations, opts, state)
-  end
-
-  defp execute_next_operation({:continue_compensate, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_compensations([{name, operation} | compensated_operations], operations, opts, state)
-  end
-
-  defp execute_next_operation({:now_execute, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_transactions([{name, operation} | compensated_operations], operations, opts, state)
+    exception = %Sage.UnexpectedCircuitBreakError{compensation_name: name, failed_transaction_name: return_name}
+    return = {:raise, {exception, System.stacktrace()}}
+    state = {return, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+    {:next_compensation, {name, operation}, state}
   end
 
   defp execute_compensation({{name, {:run, _operation, :noop, _tx_opts} = operation, state}}, _opts) do
@@ -288,14 +226,37 @@ defmodule Sage.Adapters.DefensiveRecursion do
     {name, operation, apply_compensation_fun(compensation, effect_to_compensate, {failed_name, failed_reason}, opts), state}
   end
 
-  defp apply_transaction_fun({mod, fun, args}, effects_so_far, opts), do: apply(mod, fun, [effects_so_far, opts | args])
-  defp apply_transaction_fun(fun, effects_so_far, opts), do: apply(fun, [effects_so_far, opts])
-
   defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, {name, reason}, opts),
     do: apply(mod, fun, [effect_to_compensate, {name, reason}, opts | args])
 
   defp apply_compensation_fun(fun, effect_to_compensate, {name, reason}, opts),
     do: apply(fun, [effect_to_compensate, {name, reason}, opts])
+
+  defp execute_next_operation({:next_transaction, {name, operation}, state}, operations, executed_operations, opts) do
+    execute_transactions(operations, [{name, operation} | executed_operations], opts, state)
+  end
+
+  defp execute_next_operation({:next_transaction, state}, [], [{prev_name, _prev_operation} | executed_operations], opts) do
+    {_last_effect_or_error, effects_so_far, _retries, _abort?, [], _on_compensation_error, _tracers} = state
+    state = put_elem(state, 0, Map.get(effects_so_far, prev_name))
+    execute_transactions([], executed_operations, opts, state)
+  end
+
+  defp execute_next_operation({:start_compensations, {name, operation}, state}, compensated_operations, operations, opts) do
+    execute_compensations(compensated_operations, [{name, operation} | operations], opts, state)
+  end
+
+  defp execute_next_operation({:start_compensations, state}, compensated_operations, operations, opts) do
+    execute_compensations(compensated_operations, operations, opts, state)
+  end
+
+  defp execute_next_operation({:next_compensation, {name, operation}, state}, compensated_operations, operations, opts) do
+    execute_compensations([{name, operation} | compensated_operations], operations, opts, state)
+  end
+
+  defp execute_next_operation({:retry_transaction, {name, operation}, state}, compensated_operations, operations, opts) do
+    execute_transactions([{name, operation} | compensated_operations], operations, opts, state)
+  end
 
   defp apply_and_resque_errors(module, function, arguments) do
     apply(module, function, arguments)
@@ -305,6 +266,26 @@ defmodule Sage.Adapters.DefensiveRecursion do
     :exit, reason -> {:exit, reason}
   end
 
+  defp maybe_call_final_hooks(result, [], _opts), do: result
+
+  defp maybe_call_final_hooks(result, filanlize_callbacks, opts) do
+    status = if elem(result, 0) == :ok, do: :ok, else: :error
+    # credo:disable-for-lines:11
+    filanlize_callbacks
+    |> Enum.map(fn
+      {module, function, args} ->
+        args = [status, opts | args]
+        {{module, function, args}, apply_and_resque_errors(module, function, args)}
+
+      callback ->
+        args = [status, opts]
+        {{callback, args}, apply_and_resque_errors(callback, args)}
+    end)
+    |> Enum.map(&maybe_log_errors/1)
+
+    result
+  end
+
   defp apply_and_resque_errors(function, arguments) do
     apply(function, arguments)
   rescue
@@ -312,4 +293,26 @@ defmodule Sage.Adapters.DefensiveRecursion do
   catch
     :exit, reason -> {:exit, reason}
   end
+
+  defp maybe_log_errors({from, {:raise, {exception, stacktrace}}}) do
+    Logger.error("""
+    [Sage] final hook exception from #{callback_to_string(from)} is ignored:
+
+      #{Exception.format(:error, exception, stacktrace)}
+    """)
+  end
+  defp maybe_log_errors({from, {:exit, reason}}) do
+    Logger.error("[Sage] final hook exit from #{callback_to_string(from)} is ignored. Exit reason: #{inspect(reason)}")
+  end
+  defp maybe_log_errors({_from, _other}) do
+    :ok
+  end
+
+  defp callback_to_string({m, f, a}), do: "#{to_string(m)}.#{to_string(f)}/#{to_string(length(a))}"
+  defp callback_to_string({f, _a}), do: inspect(f)
+
+  defp return_or_raise({:ok, effect, other_effects}), do: {:ok, effect, other_effects}
+  defp return_or_raise({:exit, reason}), do: exit(reason)
+  defp return_or_raise({:raise, {exception, stacktrace}}), do: reraise(exception, stacktrace)
+  defp return_or_raise({:error, reason}), do: {:error, reason}
 end
