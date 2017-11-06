@@ -19,7 +19,7 @@ defmodule Sage do
   This is done to keep simplicity and follow "let it fall" pattern of the language,
   thinking that this kind of errors should be logged and then manually investigated by a developer.
 
-  But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`.
+  But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
   When it's registered, compensations are wrapped in a `try..catch` block
   and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
@@ -103,8 +103,11 @@ defmodule Sage do
   @typedoc """
   Compensation callback.
 
-  Receives effect created by transaction it's responsible for,
-  `{operation_operation_name, reason}` tuple and options passed to `execute/2` function.
+  Receives:
+
+     * effect created by transaction it's responsible for or `nil` in case effect can not be captured;
+     * `{operation_operation_name, reason}` tuple with failed transaction name and it's failure reason;
+     * options passed to `execute/2` function.
 
   It should return:
 
@@ -144,32 +147,23 @@ defmodule Sage do
   """
   @type finally :: (:ok | :error, execute_opts :: any() -> no_return() | any()) | mfa()
 
-  @typedoc """
-  Hook which can executed before and after transaction or compensation.
-
-  Function return is ignored. All exit's and raises are rescued and logged.
-
-  ## Hooks State
-
-  All hooks share their state, which by default contains options passed to `execute/2` function.
-  Altering this state won't affect Sage execution in any way, changes would be visible only to other
-  before and after hooks.
-  """
-  @type before_after_hook :: (operation_name :: name(), shared_state :: any() -> no_return() | any())
-
-  @typep operation :: {:run, transaction(), compensation()} | {:run_async, transaction(), compensation(), async_opts()}
+  @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
   @type t :: %__MODULE__{
           operations: [{name(), operation()}],
           operation_names: MapSet.t(),
           finally: [finally()],
-          on_compensation_error: :raise | module()
+          on_compensation_error: :raise | module(),
+          tracers: [module()],
+          adapter: module()
         }
 
   defstruct operations: [],
             operation_names: MapSet.new(),
             finally: [],
-            on_compensation_error: :raise
+            on_compensation_error: :raise,
+            tracers: [],
+            adapter: Sage.Adapters.DefensiveRecursion
 
   @doc false
   def start(_type, _args) do
@@ -194,33 +188,58 @@ defmodule Sage do
 
   Adapter must implement `Sage.CompensationErrorHandlerAdapter` behaviour.
   """
-  @spec on_compensation_error(sage :: t(), adapter :: module()) :: t()
-  def on_compensation_error(%Sage{} = sage, adapter) do
-    unless Code.ensure_loaded?(adapter) or function_exported?(adapter, :handle_error, 2) do
+  @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
+  def with_compensation_error_handler(%Sage{} = sage, module) do
+    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_error, 2) do
       message = """
-      adapter for compensation error handing is not defined
-      or does not implement handle_error/2 function
+      module #{inspect(module)} is not loaded or does not implement handle_error/2
+      function, and can not be used for compensation error handing
       """
 
       raise ArgumentError, message
     end
 
-    %{sage | on_compensation_error: adapter}
+    %{sage | on_compensation_error: module}
   end
 
   @doc """
-  Appends sage with an transaction and function to compensate it's effects.
+  Registers tracing for a Sage.
+
+  It will be called before after each execution of a Sage operation,
+  which can be used to set metrics and measure how much time each of those steps took.
+
+  Adapter must implement `Sage.Tracer` behaviour.
+
+  TODO: What happens on raise from a tracer?
+  """
+  @spec with_tracer(sage :: t(), module :: module()) :: t()
+  def with_tracer(%Sage{} = sage, module) do
+    unless Code.ensure_loaded?(module) and function_exported?(module, :event, 3) do
+      message = """
+      module #{inspect(module)} is not loaded or does not implement event/3
+      function, and can not be used for compensation error handing
+      """
+
+      raise ArgumentError, message
+    end
+
+    %{sage | tracers: [module | sage.tracers]}
+  end
+
+  @doc """
+  Appends sage with an transaction and function to compensate it's effect.
 
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
 
-  If transaction does not produce effects to compensate, pass `:noop` instead of compensation callback.
+  If transaction does not produce effect to compensate, pass `:noop` instead of compensation callback.
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation()) :: t()
-  def run(sage, name, transaction, compensation), do: add_operation(sage, :run, name, transaction, compensation)
+  def run(sage, name, transaction, compensation) when is_atom(name),
+    do: add_operation(sage, :run, name, transaction, compensation)
 
   @doc """
-  Appends sage with an transaction that does not have side effects.
+  Appends sage with an transaction that does not have side effect.
 
   This is an alias for calling `run/4` with a `:noop` instead of compensation callback.
 
@@ -228,15 +247,15 @@ defmodule Sage do
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction()) :: t()
-  def run(sage, name, transaction), do: add_operation(sage, :run, name, transaction, :noop)
+  def run(sage, name, transaction) when is_atom(name), do: add_operation(sage, :run, name, transaction, :noop)
 
   @doc """
-  Appends sage with an asynchronous transaction and function to compensate it's effects.
-  It's transaction callback would receive only effects created by preceding synchronous transactions.
+  Appends sage with an asynchronous transaction and function to compensate it's effect.
+  It's transaction callback would receive only effect created by preceding synchronous transactions.
 
   All asynchronous transactions are awaited before next synchronous transaction.
   If there is an error in asynchronous transaction, Sage will await for other transactions to complete or fail and
-  then compensate for all the effects created by them.
+  then compensate for all the effect created by them.
 
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
@@ -248,7 +267,7 @@ defmodule Sage do
   """
   @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation(), opts :: async_opts()) ::
           t()
-  def run_async(sage, name, transaction, compensation, opts \\ []),
+  def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
     do: add_operation(sage, :run_async, name, transaction, compensation, opts)
 
   @doc """
@@ -257,14 +276,30 @@ defmodule Sage do
   For callback specification see `t:finally/0`.
   """
   @spec finally(sage :: t(), callback :: finally()) :: t()
-  def finally(%Sage{} = sage, callback) when is_function(callback, 2), do: %{sage | finally: sage.finally ++ [callback]}
+  def finally(%Sage{} = sage, callback) when is_function(callback, 2) do
+    %{sage | finally: sage.finally ++ [callback]}
+  end
 
   def finally(%Sage{} = sage, {module, function, arguments})
-      when is_atom(module) and is_atom(function) and is_list(arguments),
-      do: %{sage | finally: sage.finally ++ [{module, function, arguments}]}
+      when is_atom(module) and is_atom(function) and is_list(arguments) do
+    arith = length(arguments) + 2
+
+    unless Code.ensure_loaded?(module) and function_exported?(module, function, arith) do
+      message = """
+      module #{inspect(module)} is not loaded or does not implement #{to_string(function)}/#{to_string(arith)}
+      function, and can not be used as Sage finally hook
+      """
+
+      raise RuntimeError, message
+    end
+
+    %{sage | finally: sage.finally ++ [{module, function, arguments}]}
+  end
 
   @doc """
   Executes a Sage.
+
+  Raises `RuntimeError` if adapter is not loaded or does not implement `execute/2` callback.
 
   Optionally, you can pass global options in `opts`, that will be sent to
   all transaction and compensation functions. It is especially useful when
@@ -275,35 +310,33 @@ defmodule Sage do
   Sage will reraise it after compensating all effects.
 
   For handling exceptions in compensation functions see "Critical Error Handling" in module doc.
-
-  ## Tracing Hooks
-
-  It is possible to set hooks that run before after each execution of a Sage operation,
-  which can be used to set metrics and measure how much time each those steps took.
-
-  Hooks are passed in `opts`:
-
-    * `before_transaction` - called before transaction is triggered;
-    * `after_transaction` - called after transaction is completed. \
-    For asynchronous operations it will be called after yielding for operation results;
-    * `before_compensation` - called before compensation is triggered;
-    * `after_compensation` - called after compensation is completed.
-
-  For hooks interface see `t:before_after_hook/0` type doc.
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
-  defdelegate execute(sage, opts \\ []), to: Sage.Executor
+  def execute(%Sage{} = sage, opts \\ []) do
+    %{adapter: adapter} = sage
+
+    unless Code.ensure_loaded?(adapter) and function_exported?(adapter, :execute, 2) do
+      message = """
+      module #{inspect(adapter)} is not loaded or does not implement execute/2
+      function, and can not be used as Sage execution adapter
+      """
+
+      raise RuntimeError, message
+    end
+
+    apply(adapter, :execute, [sage, opts])
+  end
 
   @doc """
   Wraps `execute/2` into anonymous function to be run in a Repo transaction.
   """
-  @spec to_function(sage :: t(), opts :: Keyword.t()) :: function()
+  @spec to_function(sage :: t(), opts :: any()) :: function()
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
 
-  defp add_operation(%Sage{} = sage, type, name, transaction, compensation, opts \\ [])
-       when is_atom(name) and (is_function(transaction, 2) or (is_tuple(transaction) and tuple_size(transaction) == 3)) and
-              (is_function(compensation, 3) or (is_tuple(compensation) and tuple_size(compensation) == 3) or
-                 compensation == :noop) do
+  defp add_operation(sage, type, name, transaction, compensation, opts \\ []) do
+    ensure_transaction_callback_valid!(transaction)
+    ensure_compensation_callback_valid!(compensation)
+
     %{operations: operations, operation_names: names} = sage
 
     if MapSet.member?(names, name) do
@@ -314,6 +347,26 @@ defmodule Sage do
         | operations: [{name, {type, transaction, compensation, opts}} | operations],
           operation_names: MapSet.put(names, name)
       }
+    end
+  end
+
+  defp ensure_transaction_callback_valid!(transaction) when is_function(transaction, 2), do: :ok
+  defp ensure_transaction_callback_valid!({m, f, a}), do: ensure_mfa_valid!(:transaction, m, f, a, 2)
+
+  defp ensure_compensation_callback_valid!(:noop), do: :ok
+  defp ensure_compensation_callback_valid!(compensation) when is_function(compensation, 3), do: :ok
+  defp ensure_compensation_callback_valid!({m, f, a}), do: ensure_mfa_valid!(:compensation, m, f, a, 3)
+
+  defp ensure_mfa_valid!(operation_type, module, function, arguments, default_arith) when is_list(arguments) do
+    arity = length(arguments) + default_arith
+
+    unless Code.ensure_loaded?(module) and function_exported?(module, function, arity) do
+      message = """
+      invalid #{to_string(operation_type)} callback, module #{inspect(module)} is not loaded
+      or does not implement #{to_string(function)}/#{to_string(arity)} function
+      """
+
+      raise ArgumentError, message
     end
   end
 end

@@ -46,10 +46,64 @@ defmodule SideEffectAgent do
   end
 end
 
+defmodule DefaultCompensationErrorHandler do
+  def handle_error(a, b) do
+    IO.inspect({a, b})
+  end
+end
+
 defmodule SageTest do
   use ExUnit.Case
   import Sage
   doctest Sage
+
+  describe "with_compensation_error_handler/2" do
+    test "registers on_compensation_error hook" do
+      sage = new()
+      assert sage.on_compensation_error == :raise
+      sage = with_compensation_error_handler(sage, DefaultCompensationErrorHandler)
+      assert sage.on_compensation_error == DefaultCompensationErrorHandler
+    end
+
+    test "raises if module does not exist" do
+      message = """
+      module ModuleDoesNotExist is not loaded or does not implement handle_error/2
+      function, and can not be used for compensation error handing
+      """
+
+      assert_raise ArgumentError, message, fn ->
+        with_compensation_error_handler(new(), ModuleDoesNotExist)
+      end
+    end
+
+    test "raises if module does not implement behaviour" do
+      message = """
+      module #{inspect(__MODULE__)} is not loaded or does not implement handle_error/2
+      function, and can not be used for compensation error handing
+      """
+
+      assert_raise ArgumentError, message, fn ->
+        with_compensation_error_handler(new(), __MODULE__)
+      end
+    end
+  end
+
+  describe "run/4" do
+    test "adds operation via anonymous function to a sage" do
+    end
+
+    test "adds operation via mfa tuple to a sage" do
+    end
+
+    test "adds side-effect free operations to a sage" do
+    end
+
+    test "raises on invalid tuples" do
+    end
+
+    test "raises on invalid function arity" do
+    end
+  end
 
   test "applies transactions" do
     {:ok, agent} = SideEffectAgent.start_link()
@@ -269,6 +323,8 @@ defmodule SageTest do
       |> run(:step3, &tx_err(&1, &2, agent, :t3), &cmp_ok(&1, &2, &3, agent))
       |> execute(a: :b)
     end
+
+    assert SideEffectAgent.side_effects(agent) == []
   end
 
   test "async txs" do
