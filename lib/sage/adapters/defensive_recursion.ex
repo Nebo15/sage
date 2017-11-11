@@ -18,7 +18,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
     |> Enum.reverse()
     |> execute_transactions([], opts, inital_state)
     |> maybe_call_final_hooks(finally, opts)
-    |> return_or_raise()
+    |> return_or_reraise()
   end
 
   defp execute_transactions([], executed_operations, opts, state) do
@@ -92,39 +92,54 @@ defmodule Sage.Adapters.DefensiveRecursion do
   end
 
   defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
-    try do
-      transaction
-      |> apply_transaction_fun(effects_so_far, opts)
-      |> validate_transaction_return!(transaction)
-    rescue
-      exception ->
-        {:raise, {exception, System.stacktrace()}}
-    catch
-      :exit, reason ->
-        {:exit, reason}
-    end
+    apply_transaction_fun(transaction, effects_so_far, opts)
+  rescue
+    exception -> {:raise, {exception, System.stacktrace()}}
+  catch
+    :exit, reason -> {:exit, reason}
   end
 
   defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, effects_so_far, opts) do
     task =
       Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
-        transaction
-        |> apply_transaction_fun(effects_so_far, opts)
-        |> validate_transaction_return!(transaction)
+        apply_transaction_fun(transaction, effects_so_far, opts)
       end)
 
     {task, tx_opts}
   end
 
-  defp apply_transaction_fun({mod, fun, args}, effects_so_far, opts), do: apply(mod, fun, [effects_so_far, opts | args])
-  defp apply_transaction_fun(fun, effects_so_far, opts), do: apply(fun, [effects_so_far, opts])
+  defp apply_transaction_fun({mod, fun, args} = mfa, effects_so_far, opts) do
+    apply(mod, fun, [effects_so_far, opts | args])
+  else
+    {:ok, effect} ->
+      {:ok, effect}
 
-  defp validate_transaction_return!({:ok, effect}, _transaction), do: {:ok, effect}
-  defp validate_transaction_return!({:error, reason}, _transaction), do: {:error, reason}
-  defp validate_transaction_return!({:abort, reason}, _transaction), do: {:abort, reason}
+    {:error, reason} ->
+      {:error, reason}
 
-  defp validate_transaction_return!(other, transaction) do
-    {:raise, {%Sage.MalformedTransactionReturnError{transaction: transaction, return: other}, System.stacktrace()}}
+    {:abort, reason} ->
+      {:abort, reason}
+
+    other ->
+      stacktrace = System.stacktrace()
+      {:raise, {%Sage.MalformedTransactionReturnError{transaction: mfa, return: other}, stacktrace}}
+  end
+
+  defp apply_transaction_fun(fun, effects_so_far, opts) do
+    apply(fun, [effects_so_far, opts])
+  else
+    {:ok, effect} ->
+      {:ok, effect}
+
+    {:error, reason} ->
+      {:error, reason}
+
+    {:abort, reason} ->
+      {:abort, reason}
+
+    other ->
+      stacktrace = System.stacktrace()
+      {:raise, {%Sage.MalformedTransactionReturnError{transaction: fun, return: other}, stacktrace}}
   end
 
   defp handle_operation_result({:start_compensations, state}), do: {:start_compensations, state}
@@ -311,8 +326,8 @@ defmodule Sage.Adapters.DefensiveRecursion do
   defp callback_to_string({m, f, a}), do: "#{to_string(m)}.#{to_string(f)}/#{to_string(length(a))}"
   defp callback_to_string({f, _a}), do: inspect(f)
 
-  defp return_or_raise({:ok, effect, other_effects}), do: {:ok, effect, other_effects}
-  defp return_or_raise({:exit, reason}), do: exit(reason)
-  defp return_or_raise({:raise, {exception, stacktrace}}), do: reraise(exception, stacktrace)
-  defp return_or_raise({:error, reason}), do: {:error, reason}
+  defp return_or_reraise({:ok, effect, other_effects}), do: {:ok, effect, other_effects}
+  defp return_or_reraise({:exit, reason}), do: exit(reason)
+  defp return_or_reraise({:raise, {exception, stacktrace}}), do: reraise(exception, stacktrace)
+  defp return_or_reraise({:error, reason}), do: {:error, reason}
 end
