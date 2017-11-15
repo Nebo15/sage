@@ -114,8 +114,8 @@ import Sage
 
 new()
 |> run(:user, &create_user/2)
-|> run_cached(:plans, &fetch_subscription_plans/3)
-|> retry_on_error(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `attrs`
+|> run_cached(:plans, &fetch_subscription_plans/3, ttl: 30_000) # Cache response for 30 seconds
+|> retry_on_error(retry_limit: 3) # If one of next transactions fails, retry them for 3 times
 |> run(:subscription, &create_subscription/2, &delete_subscription/3)
 |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
 |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
