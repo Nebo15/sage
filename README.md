@@ -167,7 +167,7 @@ This guarantee simplifies integration with a job processing queues, you can read
 If error is raised withing this hook, it's logged and ignored. Follow the simple rule - everything that
 is on your critical path should be a Sage transaction.
 
-## Inspecting saga
+## Tracing and measuring Sage execution steps
 
 Sage allows you to set a tracer module which is called on each step of execution flow (before and after transactions and compensations). It can be used report metrics on execution flow.
 
