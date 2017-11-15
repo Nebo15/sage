@@ -1,9 +1,6 @@
 defmodule Sage.Adapters.DefensiveRecursionTest do
   use Sage.EffectsCase
 
-  def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise "Not implemented"
-  def dummy_compensation_for_mfa(_effect_to_compensate, _name_and_reason, _opts), do: raise "Not implemented"
-
   # TODO: effects are created .. for all transactions
   describe "transactions" do
     test "are executed" do
@@ -17,10 +14,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
       assert_effects [:t1, :t2, :t3]
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
-    end
-
-    def mfa_transaction(effects_so_far, opts, cb) do
-      cb.(effects_so_far, opts)
     end
 
     test "are awaiting on next synchronous operation when executes asynchronous transactions" do
@@ -553,21 +546,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       assert log =~ "Final hook threw an error"
       assert log =~ "Final hook exited"
     end
-
-    def final_hook_with_raise(status, _opts, test_pid) do
-      send(test_pid, status)
-      raise "Final mfa hook raised an exception"
-    end
-
-    def final_hook_with_throw(status, _opts, test_pid) do
-      send(test_pid, status)
-      raise "Final mfa hook threw an error"
-    end
-
-    def final_hook_with_exit(status, _opts, test_pid) do
-      send(test_pid, status)
-      raise "Final mfa hook exited"
-    end
   end
 
   describe "global options" do
@@ -765,4 +743,21 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
   end
 
   def do_send(msg, _opts, pid), do: send(pid, msg)
+
+  def mfa_transaction(effects_so_far, opts, cb), do: cb.(effects_so_far, opts)
+
+  def final_hook_with_raise(status, _opts, test_pid) do
+    send(test_pid, status)
+    raise "Final mfa hook raised an exception"
+  end
+
+  def final_hook_with_throw(status, _opts, test_pid) do
+    send(test_pid, status)
+    raise "Final mfa hook threw an error"
+  end
+
+  def final_hook_with_exit(status, _opts, test_pid) do
+    send(test_pid, status)
+    raise "Final mfa hook exited"
+  end
 end
