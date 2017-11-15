@@ -11,7 +11,7 @@ successfully completed or compensating transactions are run to amend a partial e
 >
 > -- <cite>@jayjun</cite>
 
-This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's beset to make sure that it's and all predecessors compensations are completed.
+This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's best to make sure that it's and all predecessors compensations are completed.
 
 To visualize, let's imagine we have a 4-step transaction. Successful flow should look something like this:
 ```
@@ -47,7 +47,7 @@ In those cases you can't get transaction isolation that we all are used to thank
 When failing in the middle of transaction now it's the developer responsibility to make sure
 we cleaned out all side effects to don't leave application in inconsistent state.
 
-Consider following pseudo-code:
+Consider following pseudo-code (don't do this):
 
 ```elixir
 defmodule WithSagas do
@@ -102,7 +102,7 @@ Along with issues highlighted in code itself, there are few more:
 2. Hard to control that for all cases there is a condition to compensate then;
 3. Does not cover retries, async operations or circuit breaker;
 4. Can not keep things together, because `with` returns are not available in `else` block;
-5. No error handling in case of code bugs;
+5. No error handling in case of our code has bugs;
 5. Hard to test.
 
 Of course, you can manage that by splitting `create_and_subscribe_user/1`, but the resulting code would take more space and be harder to maintain.
@@ -115,7 +115,7 @@ import Sage
 new()
 |> run(:user, &create_user/2)
 |> run_cached(:plans, &fetch_subscription_plans/3)
-|> checkpoint(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `attrs`
+|> retry_on_error(retry_limit: 3) # Retry everything after a checkpoint 3 times (if anything fails), `retry_timeout` is taken from `attrs`
 |> run(:subscription, &create_subscription/2, &delete_subscription/3)
 |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
 |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
@@ -127,18 +127,20 @@ new()
 
 Along with more readable code, you getting:
 
-- guarantees that transaction steps are completed or all failed steps are compensated;
-- much simpler and easier to test code for transaction and compensation function implementations;
-- retries, caching, circuit breaking and asynchronous requests;
-- declarative way to define your transactions and run them.
+- Guarantees that transaction steps are completed or all failed steps are compensated;
+- Much simpler and easier to test code for transaction and compensation function implementations;
+- Retries, caching, circuit breaking and asynchronous requests;
+- Declarative way to define your transactions and run them.
 
 ## Critical Error Handling
 
 ### For Transactions
 
 Transactions are wrapped in a `try..catch` block.
-Whenever a critical error occurs (exception is raised, exit signal is received or function has an unexpected return)
-Sage will run all compensations and then reraise exception, so you would see it like it occurred without Sage.
+
+Whenever a critical error occurs (exception is raised, error thrown or exit signal is received)
+Sage will run all compensations and then reraise the exception with the same stacktrace,
+so your log would look like it occurred without a Sage.
 
 ### For Compensations
 
@@ -157,10 +159,19 @@ and then it's error handler responsibility to take care about further actions. F
 
 Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
 
-## For `finally/2` callback
+## `finally/2` hook
 
 Sage does it's best to make sure final callback is executed even if there is a program bug in the code.
 This guarantee simplifies integration with a job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
+
+If error is raised withing this hook, it's logged and ignored. Follow the simple rule - everything that
+is on your critical path should be a Sage transaction.
+
+## Inspecting saga
+
+Sage allows you to set a tracer module which is called on each step of execution flow (before and after transactions and compensations). It can be used report metrics on execution flow.
+
+If error is raised withing tracing function, it's logged and ignored.
 
 # Visualizations
 
@@ -197,72 +208,6 @@ For making it easier to understand what flow you should expect here are few addi
 [C1]   <- [C2]   <- [C3]
 ```
 
-# RFC's
-
-### Inspecting
-
-Allow to add `after_transaction`, `before_transaction`, `after_compensation`, `before_compensation` callbacks that can share a state and can report metrics on execution flow. They should not affect execution in any way or receive effects from it (except operation name).
-
-### Idempotency
-
-```elixir
-sage =
-  new()
-  |> with_idempotency(MyIdempotencyAdapter) // or with_persistency()
-  |> run(:t1, ..)
-  |> run(:t2, ..)
-  |> checkpoint() # Ok, result is written to a persistent storage
-  |> run(:t3, ..) # Fails only for the first time
-
-execute(sage, [attr: "hello world"]) # Returns an error
-
-execute(sage, [attr: "hello world"]) # Would continue from `:t2` by re-using persistent state which is stored as hash over all the arguments (or user-provided).
-```
-
-### HTTP lib on top of Sage
-
-See https://gist.github.com/michalmuskala/5cee518b918aa5a441e757efca965d22.
-
-HTTP client can extend Saga's interface and we will be able to:
-- suggest the way to compensate request;
-- require compensation for non-idempotent operations;
-- reduce amount of code that needs to be written for complex API interactions.
-
-#### Locks
-
-Placing a short-term timeout-based lock on each resource that's required to complete an operation, and obtaining these resources in advance, can help increase the likelihood that the overall activity will succeed. The work should be performed only after all the resources have been acquired. All actions must be finalized before the locks expire.
-
-#### Retries
-
-Consider using retry logic that is more forgiving than usual to minimize failures that trigger a compensating transaction. If a step in an operation that implements eventual consistency fails, try handling the failure as a transient exception and repeat the step. Only stop the operation and initiate a compensating transaction if a step fails repeatedly or irrecoverably.
-
-#### Type checking
-
-We can leverage dializer?
-
-#### Tests
-
-Integration with property testing would make possible to test your transaction functions and almost automatically make sure Saga is correct for most common scenarios.
-
-#### Caching
-
-Add build-in behaviour and simple cache adapter for caching transaction return.
-
-#### Async dependencies
-
-Allow async operations to optionally specify dependency after which they want to run:
-
-```elixir
-sage
-|> run_async(:a, tx_cb, cmp_cb)
-|> run_async(:b, tx_cb, cmp_cb, after: :a)
-|> run_async(:e, tx_cb, cmp_cb)
-|> run_async(:c, tx_cb, cmp_cb, after: [:b, :e])
-```
-
-To implement this we need a run-time checks for dependency tree to get rid
-of dead ends and recursive dependencies before sage is executed.
-
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
@@ -276,9 +221,7 @@ def deps do
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/sage](https://hexdocs.pm/sage).
+Documentation can be found at [https://hexdocs.pm/sage](https://hexdocs.pm/sage).
 
 # License
 

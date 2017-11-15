@@ -1,7 +1,6 @@
 defmodule Sage.Adapters.DefensiveRecursionTest do
   use Sage.EffectsCase
 
-  # TODO: effects are created .. for all transactions
   describe "transactions" do
     test "are executed" do
       result =
@@ -67,7 +66,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     assert result == {:error, :t1}
   end
 
-  # TODO: effects are compensated
   describe "effects are compensated" do
     test "when transaction fails" do
       result =
