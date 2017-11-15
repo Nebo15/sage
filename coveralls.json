@@ -1,0 +1,10 @@
+{
+  "skip_files": [
+    "test/*"
+  ],
+  "custom_stop_words": [
+    "send",
+    "defmacro"
+  ],
+  "treat_no_relevant_lines_as_covered": true
+}
