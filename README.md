@@ -228,6 +228,14 @@ HTTP client can extend Saga's interface and we will be able to:
 - require compensation for non-idempotent operations;
 - reduce amount of code that needs to be written for complex API interactions.
 
+#### Locks
+
+Placing a short-term timeout-based lock on each resource that's required to complete an operation, and obtaining these resources in advance, can help increase the likelihood that the overall activity will succeed. The work should be performed only after all the resources have been acquired. All actions must be finalized before the locks expire.
+
+#### Retries
+
+Consider using retry logic that is more forgiving than usual to minimize failures that trigger a compensating transaction. If a step in an operation that implements eventual consistency fails, try handling the failure as a transient exception and repeat the step. Only stop the operation and initiate a compensating transaction if a step fails repeatedly or irrecoverably.
+
 #### Type checking
 
 We can leverage dializer?

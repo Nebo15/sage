@@ -76,3 +76,19 @@ defmodule Sage.MalformedTransactionReturnError do
     """
   end
 end
+
+defmodule Sage.MalformedCompensationReturnError do
+  @moduledoc """
+  Raised at runtime when the compensation or operation has an malformed return.
+  """
+  defexception [:compensation, :return]
+
+  def message(%__MODULE__{compensation: compensation, return: return}) do
+    """
+    unexpected return from compensation #{inspect(compensation)},
+    expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+
+      #{inspect(return)}
+    """
+  end
+end

@@ -96,6 +96,9 @@ defmodule Sage do
 
   After receiving `{:abort, reason}` Sage will compensate all side effects created so far and ignore all retries.
 
+  Transaction function should be idempotent, since it is possible to retry failed operations
+  (after compensating it's effects).
+
   `Sage.MalformedTransactionReturnError` is raised if callback returns malformed result.
   """
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
@@ -152,17 +155,17 @@ defmodule Sage do
   @type t :: %__MODULE__{
           operations: [{name(), operation()}],
           operation_names: MapSet.t(),
-          finally: [finally()],
+          finally: MapSet.t(finally()),
           on_compensation_error: :raise | module(),
-          tracers: [module()],
+          tracers: MapSet.t(module()),
           adapter: module()
         }
 
   defstruct operations: [],
             operation_names: MapSet.new(),
-            finally: [],
+            finally: MapSet.new(),
             on_compensation_error: :raise,
-            tracers: [],
+            tracers: MapSet.new(),
             adapter: Sage.Adapters.DefensiveRecursion
 
   @doc false
@@ -208,22 +211,32 @@ defmodule Sage do
   It will be called before after each execution of a Sage operation,
   which can be used to set metrics and measure how much time each of those steps took.
 
-  Adapter must implement `Sage.Tracer` behaviour.
+  Registering duplicated tracing callback is not allowed and would raise an exception.
 
-  TODO: What happens on raise from a tracer?
+  All errors during execution of a tracing callbacks would be logged, but it won't affect Sage execution.
+
+  Adapter must implement `Sage.Tracer` behaviour.
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
   def with_tracer(%Sage{} = sage, module) do
-    unless Code.ensure_loaded?(module) and function_exported?(module, :event, 3) do
+    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_event, 2) do
       message = """
-      module #{inspect(module)} is not loaded or does not implement event/3
-      function, and can not be used for compensation error handing
+      module #{inspect(module)} is not loaded or does not implement handle_event/2
+      function, and can not be used as tracing adapter
       """
 
       raise ArgumentError, message
     end
 
-    %{sage | tracers: [module | sage.tracers]}
+    if MapSet.member?(sage.tracers, module) do
+      message = """
+      module #{inspect(module)} is already registered for tracing
+      """
+
+      raise ArgumentError, message
+    end
+
+    %{sage | tracers: MapSet.put(sage.tracers, module)}
   end
 
   @doc """
@@ -273,14 +286,26 @@ defmodule Sage do
   @doc """
   Appends a sage with a function that will be triggered after sage success or abort.
 
+  Registering duplicated final callback is not allowed and would raise an exception.
+
+  All errors during execution of a final callback would be logged, but it won't affect Sage execution.
+
   For callback specification see `t:finally/0`.
   """
   @spec finally(sage :: t(), callback :: finally()) :: t()
   def finally(%Sage{} = sage, callback) when is_function(callback, 2) do
-    %{sage | finally: sage.finally ++ [callback]}
+    if MapSet.member?(sage.finally, callback) do
+      message = """
+      #{inspect(callback)} is already registered as final hook
+      """
+
+      raise ArgumentError, message
+    end
+
+    %{sage | finally: MapSet.put(sage.finally, callback)}
   end
 
-  def finally(%Sage{} = sage, {module, function, arguments})
+  def finally(%Sage{} = sage, {module, function, arguments} = mfa)
       when is_atom(module) and is_atom(function) and is_list(arguments) do
     arith = length(arguments) + 2
 
@@ -290,16 +315,24 @@ defmodule Sage do
       function, and can not be used as Sage finally hook
       """
 
-      raise RuntimeError, message
+      raise ArgumentError, message
     end
 
-    %{sage | finally: sage.finally ++ [{module, function, arguments}]}
+    if MapSet.member?(sage.finally, mfa) do
+      message = """
+      module #{inspect(module)} is already registered as final hook
+      """
+
+      raise ArgumentError, message
+    end
+
+    %{sage | finally: MapSet.put(sage.finally, mfa)}
   end
 
   @doc """
   Executes a Sage.
 
-  Raises `RuntimeError` if adapter is not loaded or does not implement `execute/2` callback.
+  Raises `ArgumentError` if adapter is not loaded or does not implement `execute/2` callback.
 
   Optionally, you can pass global options in `opts`, that will be sent to
   all transaction and compensation functions. It is especially useful when
@@ -312,7 +345,11 @@ defmodule Sage do
   For handling exceptions in compensation functions see "Critical Error Handling" in module doc.
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
-  def execute(%Sage{} = sage, opts \\ []) do
+  def execute(sage, opts \\ [])
+  def execute(%Sage{operations: []}, _opts) do
+    raise ArgumentError, "trying to execute Sage without transactions is not allowed"
+  end
+  def execute(%Sage{} = sage, opts) do
     %{adapter: adapter} = sage
 
     unless Code.ensure_loaded?(adapter) and function_exported?(adapter, :execute, 2) do
@@ -321,7 +358,7 @@ defmodule Sage do
       function, and can not be used as Sage execution adapter
       """
 
-      raise RuntimeError, message
+      raise ArgumentError, message
     end
 
     apply(adapter, :execute, [sage, opts])
