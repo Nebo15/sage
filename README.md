@@ -286,6 +286,12 @@ See [LICENSE.md](LICENSE.md).
 
 # Credits
 
-Parts of the code and implementation ideas are taken from [`Ecto.Multi`](https://github.com/elixir-ecto/ecto/blob/master/lib/ecto/multi.ex) module originally implemented by @michalmuskala and [`gisla`](https://github.com/mrallen1/gisla) by @mrallen1 which implements Sagas for Erlang.
+Some implementation ideas were taken from [`Ecto.Multi`](https://github.com/elixir-ecto/ecto/blob/master/lib/ecto/multi.ex) module originally implemented by @michalmuskala and [`gisla`](https://github.com/mrallen1/gisla) by @mrallen1 which implements Sagas pattern for Erlang.
 
-Sagas idea have origins from [this whitepaper](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) from 80's.
+Sagas idea have origins from [whitepaper](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) written in 80's. There are more recent work - [Compensating Transactions](https://docs.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction) which is part of Azure Architecture Guidelines.
+
+# Thanks to
+
+ - Josh Forisha for letting me to use this awesome project name on hex.pm (he had a package with that name);
+ - @michalmuskala, @alco and @alecnmk for giving feedback and ideas along my way;
+ - all the Elixir community and Core Team. Guys, you are awesome ❤️.
