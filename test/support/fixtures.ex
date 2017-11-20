@@ -79,7 +79,7 @@ defmodule Sage.Fixtures do
     end
   end
 
-  def transaction_with_invalid_return(effect) do
+  def transaction_with_malformed_return(effect) do
     test_pid = self()
     fn _effects_so_far, _opts ->
       random_sleep()
@@ -98,33 +98,27 @@ defmodule Sage.Fixtures do
   end
 
   def compensation_with_exception(effect \\ nil) do
-    test_pid = self()
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _name_and_reason, _opts ->
       random_sleep()
-      EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       raise "error while compensating #{to_string(effect)}"
     end
   end
 
   def compensation_with_throw(effect \\ nil) do
-    test_pid = self()
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _name_and_reason, _opts ->
       random_sleep()
-      EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       throw "error while compensating #{to_string(effect)}"
     end
   end
 
   def compensation_with_exit(effect \\ nil) do
-    test_pid = self()
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _name_and_reason, _opts ->
       random_sleep()
-      EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       exit "error while compensating #{to_string(effect)}"
     end
   end
 
-  def compensation_with_invalid_return(effect \\ nil) do
+  def compensation_with_malformed_return(effect \\ nil) do
     test_pid = self()
     fn effect_to_compensate, _name_and_reason, _opts ->
       random_sleep()

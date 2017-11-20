@@ -139,7 +139,7 @@ defmodule Sage do
           (effect_to_compensate() :: any(),
            {operation_operation_name :: name(), failed_value :: any()},
            execute_opts :: any() ->
-             :ok | :abort | {:retry, Keyword.t()} | {:continue, any()})
+             :ok | :abort | {:retry, [{:retry_limit, integer()}]} | {:continue, any()})
           | :noop
           | mfa()
   @typedoc """

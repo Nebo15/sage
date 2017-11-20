@@ -261,7 +261,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run(:step2, transaction(:t2), compensation())
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run(:step5, transaction_with_invalid_return(:t5), compensation(:t5))
+        |> run(:step5, transaction_with_malformed_return(:t5), compensation(:t5))
         |> assert_finally_fails()
         |> execute()
       end
@@ -403,7 +403,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run(:step2, transaction(:t2), compensation())
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run_async(:step5, transaction_with_invalid_return(:t5), not_strict_compensation(:t5))
+        |> run_async(:step5, transaction_with_malformed_return(:t5), not_strict_compensation(:t5))
         |> assert_finally_fails()
         |> execute()
       end
@@ -416,7 +416,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     end
   end
 
-  test "raise in compensations are not silenced by default" do
+  test "errors in compensations are raised by default" do
     test_pid = self()
     tx = transaction(:t3)
     tx = fn effects_so_far, opts ->
@@ -435,7 +435,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       |> execute()
     end
 
-    # Retries are applying when tx exited
+    # Transactions are executed once
     assert_receive {:execute, :t3}
     refute_receive {:execute, :t3}
 
@@ -443,6 +443,108 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     assert_effect :t2
     assert_effect :t3
     assert_effect :t4
+  end
+
+  describe "compensation error handler" do
+    test "can resume compensation of effects on exception" do
+      test_pid = self()
+      tx = transaction(:t3)
+      tx = fn effects_so_far, opts ->
+        send test_pid, {:execute, :t3}
+        tx.(effects_so_far, opts)
+      end
+
+      new()
+      |> run(:step1, transaction(:t1), compensation_with_retry(3))
+      |> run(:step2, transaction(:t2), compensation())
+      |> run_async(:step3, tx, not_strict_compensation())
+      |> run_async(:step4, transaction(:t4), not_strict_compensation())
+      |> run(:step5, transaction_with_error(:t5), compensation_with_exception(:t5))
+      |> assert_finally_fails()
+      |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
+      |> execute()
+
+      # Transactions are executed once
+      assert_receive {:execute, :t3}
+      refute_receive {:execute, :t3}
+
+      assert_no_effects()
+    end
+
+    test "can resume compensation of effects on exit" do
+      test_pid = self()
+      tx = transaction(:t3)
+      tx = fn effects_so_far, opts ->
+        send test_pid, {:execute, :t3}
+        tx.(effects_so_far, opts)
+      end
+
+      new()
+      |> run(:step1, transaction(:t1), compensation_with_retry(3))
+      |> run(:step2, transaction(:t2), compensation())
+      |> run_async(:step3, tx, not_strict_compensation())
+      |> run_async(:step4, transaction(:t4), not_strict_compensation())
+      |> run(:step5, transaction_with_error(:t5), compensation_with_exit(:t5))
+      |> assert_finally_fails()
+      |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
+      |> execute()
+
+      # Transactions are executed once
+      assert_receive {:execute, :t3}
+      refute_receive {:execute, :t3}
+
+      assert_no_effects()
+    end
+
+    test "can resume compensation of effects on throw" do
+      test_pid = self()
+      tx = transaction(:t3)
+      tx = fn effects_so_far, opts ->
+        send test_pid, {:execute, :t3}
+        tx.(effects_so_far, opts)
+      end
+
+      new()
+      |> run(:step1, transaction(:t1), compensation_with_retry(3))
+      |> run(:step2, transaction(:t2), compensation())
+      |> run_async(:step3, tx, not_strict_compensation())
+      |> run_async(:step4, transaction(:t4), not_strict_compensation())
+      |> run(:step5, transaction_with_error(:t5), compensation_with_throw(:t5))
+      |> assert_finally_fails()
+      |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
+      |> execute()
+
+      # Transactions are executed once
+      assert_receive {:execute, :t3}
+      refute_receive {:execute, :t3}
+
+      assert_no_effects()
+    end
+
+    test "can resume compensation of effects on malformed return" do
+      test_pid = self()
+      tx = transaction(:t3)
+      tx = fn effects_so_far, opts ->
+        send test_pid, {:execute, :t3}
+        tx.(effects_so_far, opts)
+      end
+
+      new()
+      |> run(:step1, transaction(:t1), compensation_with_retry(3))
+      |> run(:step2, transaction(:t2), compensation())
+      |> run_async(:step3, tx, not_strict_compensation())
+      |> run_async(:step4, transaction(:t4), not_strict_compensation())
+      |> run(:step5, transaction_with_error(:t5), compensation_with_malformed_return(:t5))
+      |> assert_finally_fails()
+      |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
+      |> execute()
+
+      # Transactions are executed once
+      assert_receive {:execute, :t3}
+      refute_receive {:execute, :t3}
+
+      assert_no_effects()
+    end
   end
 
   describe "final hooks" do

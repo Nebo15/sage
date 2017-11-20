@@ -227,88 +227,48 @@ defmodule Sage.Adapters.DefensiveRecursion do
   end
 
   defp execute_compensation({{name, {:run, _operation, :noop, _tx_opts} = operation}, state}, _opts) do
-    {name, operation, :ok, state}
+    {name, operation, :ok, nil, state}
   end
 
   defp execute_compensation({{name, {_type, _operation, compensation, _tx_opts} = operation}, state}, opts) do
     {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
+    return = safe_apply_compensation_fun(compensation, effect_to_compensate, {failed_name, failed_reason}, opts)
     state = {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
-    {name, operation, apply_compensation_fun(compensation, effect_to_compensate, {failed_name, failed_reason}, state, opts), state}
+    {name, operation, return, effect_to_compensate, state}
+  end
+
+  defp safe_apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts) do
+    apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts)
   rescue
-    exception -> raise_or_user_compensation_error_adapter(:exception, exception, System.stacktrace(), state)
+    exception -> {:raise, {exception, System.stacktrace()}}
   catch
-    :exit, reason -> raise_or_user_compensation_error_adapter(:exit, reason, state)
-    :throw, reason -> raise_or_user_compensation_error_adapter(:throw, reason, state)
-  end
-
-  defp apply_compensation_fun({mod, fun, args} = mfa, effect_to_compensate, {name, reason}, state, opts) do
-    apply(mod, fun, [effect_to_compensate, {name, reason}, opts | args])
+    :exit, reason -> {:exit, reason}
+    :throw, error -> {:throw, error}
   else
     :ok -> :ok
     :abort -> :abort
-    :retry -> :retry
     {:retry, retry_opts} -> {:retry, retry_opts}
     {:continue, effect} -> {:continue, effect}
-    other -> raise_or_user_compensation_error_adapter(:exception, Sage.MalformedCompensationReturnError, [compensation: mfa, return: other], state)
+    other -> {:raise, {%Sage.MalformedCompensationReturnError{compensation: compensation, return: other}, System.stacktrace()}}
   end
 
-  defp apply_compensation_fun(fun, effect_to_compensate, {name, reason}, state, opts) do
-    apply(fun, [effect_to_compensate, {name, reason}, opts])
-  else
-    :ok -> :ok
-    :abort -> :abort
-    :retry -> :retry
-    {:retry, retry_opts} -> {:retry, retry_opts}
-    {:continue, effect} -> {:continue, effect}
-    other -> raise_or_user_compensation_error_adapter(:exception, Sage.MalformedCompensationReturnError, [compensation: fun, return: other], state)
-  end
+  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, {name, reason}, opts),
+    do: apply(mod, fun, [effect_to_compensate, {name, reason}, opts | args])
+  defp apply_compensation_fun(fun, effect_to_compensate, {name, reason}, opts),
+    do: apply(fun, [effect_to_compensate, {name, reason}, opts])
 
-  # TODO: interface should provide a way to continue compensations for rest of effects
-  defp raise_or_user_compensation_error_adapter(:exception, %{} = exception, stacktrace, state) do
-    {_last_effect_or_error, _effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
-    if on_compensation_error == :raise do
-      reraise exception, stacktrace
-    else
-      apply(on_compensation_error, :handle_error, [:exception, exception, stacktrace, state])
-    end
-  end
-  defp raise_or_user_compensation_error_adapter(:exception, exception, message_or_opts, state) do
-    {_last_effect_or_error, _effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
-    if on_compensation_error == :raise do
-      raise exception, message_or_opts
-    else
-      apply(on_compensation_error, :handle_error, [:exception, exception, message_or_opts, state])
-    end
-  end
-  defp raise_or_user_compensation_error_adapter(:throw, reason, state) do
-    {_last_effect_or_error, _effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
-    if on_compensation_error == :raise do
-      throw reason
-    else
-      apply(on_compensation_error, :handle_error, [:throw, reason, state])
-    end
-  end
-  defp raise_or_user_compensation_error_adapter(:exit, reason, state) do
-    {_last_effect_or_error, _effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
-    if on_compensation_error == :raise do
-      exit(reason)
-    else
-      apply(on_compensation_error, :handle_error, [:exit, reason, state])
-    end
-  end
-
-  defp handle_compensation_result({name, operation, :ok, state}) do
+  defp handle_compensation_result({name, operation, :ok, _compensated_effect, state}) do
     {:next_compensation, {name, operation}, state}
   end
-  defp handle_compensation_result({name, operation, :abort, state}) do
+  defp handle_compensation_result({name, operation, :abort, _compensated_effect, state}) do
     state = put_elem(state, 3, true)
     {:next_compensation, {name, operation}, state}
   end
-  defp handle_compensation_result({name, operation, {:retry, _retry_opts}, {_last_error, _effects_so_far, _retries, true, [], _on_compensation_error, _tracers} = state}) do
+  defp handle_compensation_result({name, operation, {:retry, _retry_opts}, _compensated_effect, {_last_error, _effects_so_far, _retries, true, [], _on_compensation_error, _tracers} = state}) do
     {:next_compensation, {name, operation}, state}
   end
-  defp handle_compensation_result({name, operation, {:retry, retry_opts}, {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state}) do
+  defp handle_compensation_result({name, operation, {:retry, retry_opts}, _compensated_effect, {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state}) do
     if Keyword.fetch!(retry_opts, :retry_limit) > count do
       state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, [], on_compensation_error, tracers}
       {:retry_transaction, {name, operation}, state}
@@ -316,16 +276,28 @@ defmodule Sage.Adapters.DefensiveRecursion do
       {:next_compensation, {name, operation}, state}
     end
   end
-  defp handle_compensation_result({name, operation, {:continue, effect}, {{name, _return_reason}, effects_so_far, retries, false, [], on_compensation_error, tracers}}) do
+  defp handle_compensation_result({name, operation, {:continue, effect}, _compensated_effect, {{name, _return_reason}, effects_so_far, retries, false, [], on_compensation_error, tracers}}) do
     state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
     {:next_transaction, {name, operation}, state}
   end
-  defp handle_compensation_result({name, operation, {:continue, _effect}, state}) do
+  defp handle_compensation_result({name, operation, {:continue, _effect}, _compensated_effect, state}) do
     {{return_name, _return_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     exception = %Sage.UnexpectedCircuitBreakError{compensation_name: name, failed_transaction_name: return_name}
     return = {:raise, {exception, System.stacktrace()}}
     state = {return, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {:next_compensation, {name, operation}, state}
+  end
+  defp handle_compensation_result({name, operation, {:raise, _} = to_raise, compensated_effect, state}) do
+    state = put_elem(state, 0, to_raise)
+    {:compensation_error_handler, {name, operation, compensated_effect}, state}
+  end
+  defp handle_compensation_result({name, operation, {:exit, _reason} = error, compensated_effect, state}) do
+    state = put_elem(state, 0, error)
+    {:compensation_error_handler, {name, operation, compensated_effect}, state}
+  end
+  defp handle_compensation_result({name, operation, {:throw, _error} = error, compensated_effect, state}) do
+    state = put_elem(state, 0, error)
+    {:compensation_error_handler, {name, operation, compensated_effect}, state}
   end
 
   # Shared
@@ -355,6 +327,36 @@ defmodule Sage.Adapters.DefensiveRecursion do
   defp execute_next_operation({:retry_transaction, {name, operation}, state}, compensated_operations, operations, opts) do
     execute_transactions([{name, operation} | compensated_operations], operations, opts, state)
   end
+
+  defp execute_next_operation({:compensation_error_handler, {name, operation, compensated_effect}, state}, _compensated_operations, operations, opts) do
+    {error, effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
+    if on_compensation_error == :raise do
+      return_or_reraise(error)
+    else
+      compensations_to_run =
+        [{name, operation} | operations]
+        |> Enum.reduce([], fn
+          {_name, {_type, _operation, :noop, _tx_opts}}, acc ->
+            acc
+
+          {^name, {_type, _operation, compensation, _tx_opts}}, acc ->
+            acc ++ [{name, compensation, compensated_effect}]
+
+          {name, {_type, _operation, compensation, _tx_opts}}, acc ->
+            acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
+        end)
+
+      # Logger.warn("Using compensation error handler because #{name} had an error #{inspect(error)}")
+
+      case error do
+        {:raise, {exception, stacktrace}} -> apply(on_compensation_error, :handle_error, [{:exception, exception, stacktrace}, compensations_to_run, opts])
+        {:exit, reason} -> apply(on_compensation_error, :handle_error, [{:exit, reason}, compensations_to_run, opts])
+        {:throw, error} -> apply(on_compensation_error, :handle_error, [{:throw, error}, compensations_to_run, opts])
+      end
+    end
+  end
+
+  # defp log
 
   defp maybe_notify_final_hooks(result, [], _opts), do: result
 
