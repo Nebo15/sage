@@ -86,7 +86,7 @@ defmodule Sage.MalformedCompensationReturnError do
   def message(%__MODULE__{compensation: compensation, return: return}) do
     """
     unexpected return from compensation #{inspect(compensation)},
-    expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+    expected it to be :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
 
       #{inspect(return)}
     """

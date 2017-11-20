@@ -7,7 +7,7 @@ defmodule Sage.TestCompensationErrorHandler do
     compensations_to_run
     |> List.delete_at(0)
     |> Enum.map(fn {name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
-      apply(Sage.Fixtures.compensation(), [effect_to_compensate, {name, :exception}, opts])
+      apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, {name, :exception}, opts])
     end)
 
     {:error, :failed_to_compensate_errors}
