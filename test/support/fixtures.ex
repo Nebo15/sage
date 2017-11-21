@@ -1,4 +1,5 @@
 defmodule Sage.Fixtures do
+  @moduledoc false
   alias Sage.EffectsAgent
   alias Sage.CounterAgent
 

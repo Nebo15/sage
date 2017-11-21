@@ -12,7 +12,7 @@ defmodule SageTest do
 
     test "raises if module does not exist" do
       message = """
-      module ModuleDoesNotExist is not loaded or does not implement handle_error/2
+      module ModuleDoesNotExist is not loaded or does not implement handle_error/3
       function, and can not be used for compensation error handing
       """
 
@@ -23,7 +23,7 @@ defmodule SageTest do
 
     test "raises if module does not implement behaviour" do
       message = """
-      module #{inspect(__MODULE__)} is not loaded or does not implement handle_error/2
+      module #{inspect(__MODULE__)} is not loaded or does not implement handle_error/3
       function, and can not be used for compensation error handing
       """
 

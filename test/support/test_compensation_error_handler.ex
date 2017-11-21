@@ -1,7 +1,5 @@
 defmodule Sage.TestCompensationErrorHandler do
-  def handle_error(_, _) do
-    raise "not implemented"
-  end
+  @moduledoc false
 
   def handle_error({:exception, %Sage.MalformedCompensationReturnError{}, _stacktrace}, compensations_to_run, opts) do
     compensations_to_run

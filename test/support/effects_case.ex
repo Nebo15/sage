@@ -1,4 +1,5 @@
 defmodule Sage.EffectsCase do
+  @moduledoc false
   use ExUnit.CaseTemplate
   alias Sage.EffectsAgent
 

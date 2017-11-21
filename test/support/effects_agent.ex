@@ -1,9 +1,5 @@
 defmodule Sage.EffectsAgent do
-  @moduledoc """
-  This module provides storage for effects created in tests.
-
-  It's responsibility to strictly check that effects are created and compensated in correct order.
-  """
+  @moduledoc false
   def start_link do
     Agent.start_link(fn -> %{} end, name: __MODULE__)
   end
