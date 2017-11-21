@@ -10,8 +10,8 @@ defmodule Sage do
   ### For Transactions
 
   Transactions are wrapped in a `try..catch` block.
-  Whenever a critical error occurs (exception is raised, function has an unexpected return or async transaction exits)
-  Sage will run all compensations and then reraise the exception, so you would see it like it occurred without Sage.
+  Whenever a critical error occurs Sage will run all compensations and then return exactly
+  the same error, so you would see it like it occurred without Sage.
 
   ### For Compensations
 
@@ -287,9 +287,8 @@ defmodule Sage do
 
   @doc """
   Appends sage with an asynchronous transaction and function to compensate it's effect.
-  It's transaction callback would receive only effect created by preceding synchronous transactions.
 
-  (only synchronous ones if the transaction is asynchronous)
+  It's transaction callback would receive only effect created by preceding synchronous transactions.
 
   All asynchronous transactions are awaited before next synchronous transaction.
   If there is an error in asynchronous transaction, Sage will await for other transactions to complete or fail and
