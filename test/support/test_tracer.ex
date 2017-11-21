@@ -1,5 +1,6 @@
 defmodule Sage.TestTracer do
   @moduledoc false
+  @behaviour Sage.Tracer
 
   def handle_event(name, :start_transaction, tracing_state) do
     tracing_state =

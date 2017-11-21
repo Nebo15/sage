@@ -79,38 +79,41 @@ defmodule Sage do
   """
   use Application
 
+  @typedoc """
+  Name of Sage execution stage.
+  """
   @type name :: atom()
 
+  @typedoc """
+  Effects created on Sage execution.
+  """
   @type effects :: map()
 
+  @typedoc """
+  Options for asynchronous transactions.
+  """
   @type async_opts :: [{:timeout, integer() | :infinity}]
 
   @typedoc """
-  Transaction callback.
-
-  It receives effects created by preceding transactions (only synchronous ones if the transaction is asynchronous),
+  Transaction callback that receives effects created by completed preceding transactions
   and options passed to `execute/2` function.
 
-  It should return `{:ok, effect}` if transaction is successfully completed,
-  `{:error, reason}` if there was an error or `{:abort, reason}` if there was an unrecoverable error.
+  Returns `{:ok, effect}` if transaction is successfully completed, `{:error, reason}` if there was an error
+  or `{:abort, reason}` if there was an unrecoverable error.
 
-  After receiving `{:abort, reason}` Sage will compensate all side effects created so far and ignore all retries.
-
-  Transaction function should be idempotent, since it is possible to retry failed operations
-  (after compensating it's effects).
+  On receiving `{:abort, reason}` Sage will compensate all side effects created so far and ignore all retries.
 
   `Sage.MalformedTransactionReturnError` is raised if callback returns malformed result.
+
+  ## Transaction guidelines
+
+  Transaction function should be as idempotent as possible, since it is possible that compensation would
+  retry the failed operation after compensating created side effects.
   """
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
   @typedoc """
   Compensation callback.
-
-  Compensation function should be idempotent, because it's possible to retry transactions and compensation that failed.
-
-  > You should define the steps in a compensating transaction as idempotent commands. This enables the steps to be repeated if the compensating transaction itself fails.
-
-  > A compensating transaction doesn't necessarily return the data in the system to the state it was in at the start of the original operation. Instead, it compensates for the work performed by the steps that completed successfully before the operation failed.
 
   Receives:
 
@@ -127,19 +130,29 @@ defmodule Sage do
     * `{:continue, effect}` if effect is compensated and execution can be retried with other effect \
     to replace the transaction return. This allows to implement circuit breaker.
 
+  ## Circuit Breaker
+
+  After receiving a circuit breaker response Sage will continue executing transactions by using returned effect.
+
+  Circuit breaking is only allowed if compensation function that returns it is responsible for the failed transaction
+  (they both are parts of for the same execution step). Otherwise execution would be aborted
+  and `Sage.UnexpectedCircuitBreakError` is raised. It's the developer responsibility to match operation name
+  and failed operation name.
+
+  ## Compensation guidelines
+
   General rule is that irrespectively to what compensate wants to return, **effect must be always compensated**.
   No matter what, it should not create other effects. For circuit breaker always use data that already exists,
   preferably by passing it in opts to the `execute/2`.
 
-  ## Circuit Breaker
-
-  After receiving a circuit breaker response Sage will continue executing transactions by using returned effect.
-  Circuit breaking is only allowed if compensation function that returns it is responsible for the failed transaction
-  (they both are part of for the same operation).
-
-  If compensation violates this rule, `Sage.UnexpectedCircuitBreakError` is returned.
-
-  It's the developer responsibility to match operation name and failed operation name.
+  > You should define the steps in a compensating transaction as idempotent commands.
+  > This enables the steps to be repeated if the compensating transaction itself fails.
+  >
+  > A compensating transaction doesn't necessarily return the data in the system to the state
+  > it was in at the start of the original operation. Instead, it compensates for the work
+  > performed by the steps that completed successfully before the operation failed.
+  >
+  > source: https://docs.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction
   """
   @type compensation ::
           (effect_to_compensate() :: any(),
@@ -148,13 +161,16 @@ defmodule Sage do
              :ok | :abort | {:retry, [{:retry_limit, integer()}]} | {:continue, any()})
           | :noop
           | mfa()
+
   @typedoc """
   Final callback.
 
   It receives `:ok` if all transactions are successfully completed or `:error` otherwise
   and options passed to the `execute/2`.
+
+  Return is ignored.
   """
-  @type finally :: (:ok | :error, execute_opts :: any() -> no_return() | any()) | mfa()
+  @type finally :: (:ok | :error, execute_opts :: any() -> no_return()) | mfa()
 
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
@@ -195,7 +211,9 @@ defmodule Sage do
   @doc """
   Register error handler for compensation function.
 
-  Adapter must implement `Sage.CompensationErrorHandlerAdapter` behaviour.
+  Adapter must implement `Sage.CompensationErrorHandler` behaviour.
+
+  For more information see "Critical Error Handling" in the module doc/
   """
   @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
   def with_compensation_error_handler(%Sage{} = sage, module) do
@@ -212,16 +230,14 @@ defmodule Sage do
   end
 
   @doc """
-  Registers tracing for a Sage.
-
-  It will be called before after each execution of a Sage operation,
-  which can be used to set metrics and measure how much time each of those steps took.
+  Registers tracer for a Sage execution.
+  Tracing module must implement `Sage.Tracer` behaviour.
 
   Registering duplicated tracing callback is not allowed and would raise an exception.
 
   All errors during execution of a tracing callbacks would be logged, but it won't affect Sage execution.
 
-  Adapter must implement `Sage.Tracer` behaviour.
+  For more information see `c:Sage.Tracer.handle_event/3`.
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
   def with_tracer(%Sage{} = sage, module) do
@@ -273,6 +289,8 @@ defmodule Sage do
   Appends sage with an asynchronous transaction and function to compensate it's effect.
   It's transaction callback would receive only effect created by preceding synchronous transactions.
 
+  (only synchronous ones if the transaction is asynchronous)
+
   All asynchronous transactions are awaited before next synchronous transaction.
   If there is an error in asynchronous transaction, Sage will await for other transactions to complete or fail and
   then compensate for all the effect created by them.
@@ -294,8 +312,6 @@ defmodule Sage do
   Appends a sage with a function that will be triggered after sage success or abort.
 
   Registering duplicated final callback is not allowed and would raise an exception.
-
-  All errors during execution of a final callback would be logged, but it won't affect Sage execution.
 
   For callback specification see `t:finally/0`.
   """

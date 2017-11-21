@@ -31,7 +31,7 @@ and if we have a failure on 3-d step Sage will cleanup side effects by running c
 Along with that simple idea, you will get much more out of the box with Sage:
 
 - Transaction retries;
-- TTL-based caching;
+<!-- - TTL-based caching; -->
 - Asynchronous transactions with timeout;
 - Ease to write circuit breakers;
 - Code that is clean and easy to test;

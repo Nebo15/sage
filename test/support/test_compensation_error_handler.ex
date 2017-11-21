@@ -1,5 +1,6 @@
 defmodule Sage.TestCompensationErrorHandler do
   @moduledoc false
+  @behaviour Sage.CompensationErrorHandler
 
   def handle_error({:exception, %Sage.MalformedCompensationReturnError{}, _stacktrace}, compensations_to_run, opts) do
     compensations_to_run

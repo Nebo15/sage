@@ -4,7 +4,7 @@ defmodule Sage.Experimental do
   """
   @typep cache_opts :: [{:adapter, module()}]
 
-  @typep retry_opts :: [{:adapter, module()}, {:retry_limit, integer()}, {:retry_timeout, integer()}]
+  @typep retry_opts :: [{:adapter, module()}, {:retry_limit, integer()}]
 
   @doc """
   Appends sage with an cached transaction and function to compensate it's side effects.
