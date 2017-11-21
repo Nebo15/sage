@@ -106,6 +106,12 @@ defmodule Sage do
   @typedoc """
   Compensation callback.
 
+  Compensation function should be idempotent, because it's possible to retry transactions and compensation that failed.
+
+  > You should define the steps in a compensating transaction as idempotent commands. This enables the steps to be repeated if the compensating transaction itself fails.
+
+  > A compensating transaction doesn't necessarily return the data in the system to the state it was in at the start of the original operation. Instead, it compensates for the work performed by the steps that completed successfully before the operation failed.
+
   Receives:
 
      * effect created by transaction it's responsible for or `nil` in case effect can not be captured;
@@ -193,9 +199,9 @@ defmodule Sage do
   """
   @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
   def with_compensation_error_handler(%Sage{} = sage, module) do
-    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_error, 2) do
+    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_error, 3) do
       message = """
-      module #{inspect(module)} is not loaded or does not implement handle_error/2
+      module #{inspect(module)} is not loaded or does not implement handle_error/3
       function, and can not be used for compensation error handing
       """
 
@@ -249,7 +255,7 @@ defmodule Sage do
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation()) :: t()
   def run(sage, name, transaction, compensation) when is_atom(name),
-    do: add_operation(sage, :run, name, transaction, compensation)
+    do: add_operation(sage, name, build_operation!(:run, transaction, compensation))
 
   @doc """
   Appends sage with an transaction that does not have side effect.
@@ -260,7 +266,8 @@ defmodule Sage do
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
   @spec run(sage :: t(), name :: name(), apply :: transaction()) :: t()
-  def run(sage, name, transaction) when is_atom(name), do: add_operation(sage, :run, name, transaction, :noop)
+  def run(sage, name, transaction) when is_atom(name),
+    do: add_operation(sage, name, build_operation!(:run, transaction, :noop))
 
   @doc """
   Appends sage with an asynchronous transaction and function to compensate it's effect.
@@ -281,7 +288,7 @@ defmodule Sage do
   @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation(), opts :: async_opts()) ::
           t()
   def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
-    do: add_operation(sage, :run_async, name, transaction, compensation, opts)
+    do: add_operation(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
   Appends a sage with a function that will be triggered after sage success or abort.
@@ -370,10 +377,7 @@ defmodule Sage do
   @spec to_function(sage :: t(), opts :: any()) :: function()
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
 
-  defp add_operation(sage, type, name, transaction, compensation, opts \\ []) do
-    ensure_transaction_callback_valid!(transaction)
-    ensure_compensation_callback_valid!(compensation)
-
+  defp add_operation(sage, name, operation) do
     %{operations: operations, operation_names: names} = sage
 
     if MapSet.member?(names, name) do
@@ -381,10 +385,17 @@ defmodule Sage do
     else
       %{
         sage
-        | operations: [{name, {type, transaction, compensation, opts}} | operations],
+        | operations: [{name, operation} | operations],
           operation_names: MapSet.put(names, name)
       }
     end
+  end
+
+  defp build_operation!(type, transaction, compensation, opts \\ []) when type in [:run, :run_async] do
+    ensure_transaction_callback_valid!(transaction)
+    ensure_compensation_callback_valid!(compensation)
+
+    {type, transaction, compensation, opts}
   end
 
   defp ensure_transaction_callback_valid!(transaction) when is_function(transaction, 2), do: :ok
