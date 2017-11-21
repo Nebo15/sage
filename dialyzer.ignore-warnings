@@ -1,2 +1,3 @@
 lib/sage/executor.ex:22: Expression produces a value of type [any()], but this value is unmatched
-lib/sage/exceptions.ex:48: Type specification 'Elixir.Sage.DuplicateOperationError':exception('Elixir.String':t()) -> 'Elixir.Exception':t()
+lib/sage/adapters/defensive_recursion.ex:376: Expression produces a value of type [any()], but this value is unmatched
+lib/sage/exceptions.ex:48: Type specification 'Elixir.Sage.DuplicateOperationError':exception(elixir:keyword()) -> 'Elixir.Exception':t()
