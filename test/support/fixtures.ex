@@ -164,7 +164,7 @@ defmodule Sage.Fixtures do
   end
 
   defp random_sleep do
-    0..15
+    1..15
     |> Enum.random()
     |> :timer.sleep()
   end

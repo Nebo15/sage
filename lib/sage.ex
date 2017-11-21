@@ -219,9 +219,9 @@ defmodule Sage do
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
   def with_tracer(%Sage{} = sage, module) do
-    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_event, 2) do
+    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_event, 3) do
       message = """
-      module #{inspect(module)} is not loaded or does not implement handle_event/2
+      module #{inspect(module)} is not loaded or does not implement handle_event/3
       function, and can not be used as tracing adapter
       """
 

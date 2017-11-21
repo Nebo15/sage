@@ -596,6 +596,35 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     end
   end
 
+  describe "tracers" do
+    test "are notified for all operations" do
+      result =
+        new()
+        |> run(:step1, transaction(:t1), compensation())
+        |> run(:step2, transaction(:t2), compensation())
+        |> run_async(:step3, transaction(:t3), not_strict_compensation())
+        |> run_async(:step4, transaction(:t4), not_strict_compensation())
+        |> run(:step5, transaction_with_error(:t5), compensation())
+        |> with_tracer(Sage.TestTracer)
+        |> execute(test_pid: self())
+
+      assert_no_effects()
+      assert result == {:error, :t5}
+
+      for step <- [:step1, :step2, :step3, :step4, :step5] do
+        assert_receive {^step, :start_transaction, _tracing_state}
+        assert_receive {^step, :finish_transaction, time_taken, _tracing_state}
+        assert div(System.convert_time_unit(time_taken, :native, :micro_seconds), 100) / 10 > 0.9
+      end
+
+      for step <- [:step1, :step2, :step3, :step4, :step5] do
+        assert_receive {^step, :start_compensation, _tracing_state}
+        assert_receive {^step, :finish_compensation, time_taken, _tracing_state} when time_taken > 100_000
+        assert div(System.convert_time_unit(time_taken, :native, :micro_seconds), 100) / 10 > 0.9
+      end
+    end
+  end
+
   describe "final hooks" do
     test "can be omitted" do
       result =

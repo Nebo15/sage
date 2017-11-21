@@ -11,7 +11,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
   @impl true
   def execute(%Sage{} = sage, opts) do
     %{operations: operations, finally: finally, on_compensation_error: on_compensation_error, tracers: tracers} = sage
-    inital_state = {nil, %{}, {1, []}, false, [], on_compensation_error, tracers}
+    inital_state = {nil, %{}, {1, []}, false, [], on_compensation_error, {MapSet.to_list(tracers), opts}}
     final_hooks = MapSet.to_list(finally)
 
     operations
@@ -40,11 +40,9 @@ defmodule Sage.Adapters.DefensiveRecursion do
     {_last_effect_or_error, _effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
 
     {{name, operation}, state} # TODO: Remove second tuple here
-    # |> maybe_notify_tracers()
     |> maybe_await_for_tasks(tasks)
     |> maybe_execute_transaction(opts)
     |> handle_transaction_result()
-    # |> maybe_notify_tracers()
     |> execute_next_operation(operations, executed_operations, opts)
   end
 
@@ -82,6 +80,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp handle_task_result({name, result}, {:start_compensations, state}) do
     failure_reason = elem(state, 0)
+    state = put_elem(state, 6, maybe_notify_tracers(elem(state, 6), :finish_transaction, name))
     case handle_transaction_result({name, :async, result, state}) do
       {:next_transaction, {^name, :async}, state} ->
         {:start_compensations, put_elem(state, 0, failure_reason)}
@@ -92,6 +91,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
   end
 
   defp handle_task_result({name, result}, {operation_or_command, state}) do
+    state = put_elem(state, 6, maybe_notify_tracers(elem(state, 6), :finish_transaction, name))
     case handle_transaction_result({name, :async, result, state}) do
       {:next_transaction, {^name, :async}, state} ->
         {operation_or_command, state}
@@ -104,8 +104,16 @@ defmodule Sage.Adapters.DefensiveRecursion do
   defp maybe_execute_transaction({:start_compensations, state}, _opts), do: {:start_compensations, state}
 
   defp maybe_execute_transaction({{name, operation}, state}, opts) do
-    {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, _tracers} = state
-    {name, operation, execute_transaction(operation, effects_so_far, opts), state}
+    {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, tracers} = state
+    tracers = maybe_notify_tracers(tracers, :start_transaction, name)
+    return = execute_transaction(operation, effects_so_far, opts)
+    tracers =
+      case return do
+        {%Task{}, _async_opts} -> tracers
+        _other -> maybe_notify_tracers(tracers, :finish_transaction, name)
+      end
+    state = put_elem(state, 6, tracers)
+    {name, operation, return, state}
   end
 
   defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
@@ -208,10 +216,8 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp execute_compensations(compensated_operations, [{name, operation} | operations], opts, state) do
     {{name, operation}, state}
-    # |> maybe_notify_tracers()
     |> execute_compensation(opts)
     |> handle_compensation_result()
-    # |> maybe_notify_tracers()
     |> execute_next_operation(compensated_operations, operations, opts)
   end
 
@@ -233,7 +239,9 @@ defmodule Sage.Adapters.DefensiveRecursion do
   defp execute_compensation({{name, {_type, _operation, compensation, _tx_opts} = operation}, state}, opts) do
     {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
+    tracers = maybe_notify_tracers(tracers, :start_compensation, name)
     return = safe_apply_compensation_fun(compensation, effect_to_compensate, {failed_name, failed_reason}, opts)
+    tracers = maybe_notify_tracers(tracers, :finish_compensation, name)
     state = {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {name, operation, return, effect_to_compensate, state}
   end
@@ -346,7 +354,13 @@ defmodule Sage.Adapters.DefensiveRecursion do
             acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
         end)
 
-      # Logger.warn("Using compensation error handler because #{name} had an error #{inspect(error)}")
+      Logger.warn("""
+      [Sage] compensation #{inspect(name)} failed to compensate effect:
+
+        #{inspect(compensated_effect)}
+
+      #{compensation_error_message(error)}
+      """)
 
       case error do
         {:raise, {exception, stacktrace}} -> apply(on_compensation_error, :handle_error, [{:exception, exception, stacktrace}, compensations_to_run, opts])
@@ -356,7 +370,36 @@ defmodule Sage.Adapters.DefensiveRecursion do
     end
   end
 
-  # defp log
+  def compensation_error_message({:raise, {exception, stacktrace}}) do
+    """
+    Exception was raised:
+
+      #{Exception.format(:error, exception, stacktrace)}
+
+    """
+  end
+
+  def compensation_error_message({:exit, reason}) do
+    "Because of exit with reason: #{inspect(reason)}."
+  end
+
+  def compensation_error_message({:throw, error}) do
+    "Because of thrown error: #{inspect(error)}."
+  end
+
+  # maybe do it similary to Ecto.LogEvent?
+  def maybe_notify_tracers({[], _tracing_state} = tracers, _action, _name) do
+    tracers
+  end
+
+  def maybe_notify_tracers({tracers, tracing_state}, action, name) do
+    tracing_state =
+      Enum.reduce(tracers, tracing_state, fn tracer, tracing_state ->
+        apply_and_resque_errors(tracer, :handle_event, [name, action, tracing_state])
+      end)
+
+    {tracers, tracing_state}
+  end
 
   defp maybe_notify_final_hooks(result, [], _opts), do: result
 
