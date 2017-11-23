@@ -217,15 +217,6 @@ defmodule Sage do
   """
   @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
   def with_compensation_error_handler(%Sage{} = sage, module) do
-    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_error, 3) do
-      message = """
-      module #{inspect(module)} is not loaded or does not implement handle_error/3
-      function, and can not be used for compensation error handing
-      """
-
-      raise ArgumentError, message
-    end
-
     %{sage | on_compensation_error: module}
   end
 
@@ -241,24 +232,18 @@ defmodule Sage do
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
   def with_tracer(%Sage{} = sage, module) do
-    unless Code.ensure_loaded?(module) and function_exported?(module, :handle_event, 3) do
-      message = """
-      module #{inspect(module)} is not loaded or does not implement handle_event/3
-      function, and can not be used as tracing adapter
-      """
+    raise_on_duplicate_tracer!(sage, module)
+    %{sage | tracers: MapSet.put(sage.tracers, module)}
+  end
 
-      raise ArgumentError, message
-    end
-
-    if MapSet.member?(sage.tracers, module) do
+  defp raise_on_duplicate_tracer!(%{tracers: tracers}, module) do
+    if MapSet.member?(tracers, module) do
       message = """
       module #{inspect(module)} is already registered for tracing
       """
 
       raise ArgumentError, message
     end
-
-    %{sage | tracers: MapSet.put(sage.tracers, module)}
   end
 
   @doc """
@@ -316,40 +301,28 @@ defmodule Sage do
   """
   @spec finally(sage :: t(), callback :: finally()) :: t()
   def finally(%Sage{} = sage, callback) when is_function(callback, 2) do
-    if MapSet.member?(sage.finally, callback) do
-      message = """
-      #{inspect(callback)} is already registered as final hook
-      """
-
-      raise ArgumentError, message
-    end
-
+    raise_on_duplicate_final_hook!(sage, callback)
     %{sage | finally: MapSet.put(sage.finally, callback)}
   end
 
   def finally(%Sage{} = sage, {module, function, arguments} = mfa)
       when is_atom(module) and is_atom(function) and is_list(arguments) do
-    arith = length(arguments) + 2
-
-    unless Code.ensure_loaded?(module) and function_exported?(module, function, arith) do
-      message = """
-      module #{inspect(module)} is not loaded or does not implement #{to_string(function)}/#{to_string(arith)}
-      function, and can not be used as Sage finally hook
-      """
-
-      raise ArgumentError, message
-    end
-
-    if MapSet.member?(sage.finally, mfa) do
-      message = """
-      module #{inspect(module)} is already registered as final hook
-      """
-
-      raise ArgumentError, message
-    end
-
+    raise_on_duplicate_final_hook!(sage, mfa)
     %{sage | finally: MapSet.put(sage.finally, mfa)}
   end
+
+  defp raise_on_duplicate_final_hook!(%{finally: finally}, callback) do
+    if MapSet.member?(finally, callback) do
+      message = """
+      #{format_callback(callback)} is already registered as final hook
+      """
+
+      raise ArgumentError, message
+    end
+  end
+
+  defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a)+2)}"
+  defp format_callback(cb), do: "#{inspect(cb)}"
 
   @doc """
   Executes a Sage.
@@ -369,22 +342,10 @@ defmodule Sage do
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def execute(sage, opts \\ [])
   def execute(%Sage{operations: []}, _opts) do
-    raise ArgumentError, "trying to execute Sage without transactions is not allowed"
+    raise ArgumentError, "trying to execute empty Sage is not allowed"
   end
-  def execute(%Sage{} = sage, opts) do
-    %{adapter: adapter} = sage
-
-    unless Code.ensure_loaded?(adapter) and function_exported?(adapter, :execute, 2) do
-      message = """
-      module #{inspect(adapter)} is not loaded or does not implement execute/2
-      function, and can not be used as Sage execution adapter
-      """
-
-      raise ArgumentError, message
-    end
-
-    apply(adapter, :execute, [sage, opts])
-  end
+  def execute(%Sage{adapter: adapter} = sage, opts),
+    do: apply(adapter, :execute, [sage, opts])
 
   @doc """
   Wraps `execute/2` into anonymous function to be run in a Repo transaction.
@@ -406,30 +367,6 @@ defmodule Sage do
     end
   end
 
-  defp build_operation!(type, transaction, compensation, opts \\ []) when type in [:run, :run_async] do
-    ensure_transaction_callback_valid!(transaction)
-    ensure_compensation_callback_valid!(compensation)
-
-    {type, transaction, compensation, opts}
-  end
-
-  defp ensure_transaction_callback_valid!(transaction) when is_function(transaction, 2), do: :ok
-  defp ensure_transaction_callback_valid!({m, f, a}), do: ensure_mfa_valid!(:transaction, m, f, a, 2)
-
-  defp ensure_compensation_callback_valid!(:noop), do: :ok
-  defp ensure_compensation_callback_valid!(compensation) when is_function(compensation, 3), do: :ok
-  defp ensure_compensation_callback_valid!({m, f, a}), do: ensure_mfa_valid!(:compensation, m, f, a, 3)
-
-  defp ensure_mfa_valid!(operation_type, module, function, arguments, default_arith) when is_list(arguments) do
-    arity = length(arguments) + default_arith
-
-    unless Code.ensure_loaded?(module) and function_exported?(module, function, arity) do
-      message = """
-      invalid #{to_string(operation_type)} callback, module #{inspect(module)} is not loaded
-      or does not implement #{to_string(function)}/#{to_string(arity)} function
-      """
-
-      raise ArgumentError, message
-    end
-  end
+  defp build_operation!(type, transaction, compensation, opts \\ []) when type in [:run, :run_async],
+    do: {type, transaction, compensation, opts}
 end
