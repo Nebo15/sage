@@ -4,7 +4,7 @@ alias Dogma.Rule
 config :dogma,
   rule_set: Dogma.RuleSet.All,
   exclude: [
-    ~r(\Adeps/),
+    ~r(\Adeps/)
   ],
   override: [
     %Rule.LineLength{max_length: 120},

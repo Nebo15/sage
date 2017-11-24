@@ -21,6 +21,7 @@ defmodule Sage.CounterAgent do
 
   def get(default, pid \\ :self) do
     pid = resolve_pid(pid)
+
     Agent.get_and_update(__MODULE__, fn state ->
       Map.get_and_update(state, pid, fn
         nil ->

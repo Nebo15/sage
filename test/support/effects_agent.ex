@@ -6,18 +6,19 @@ defmodule Sage.EffectsAgent do
 
   def push_effect!(effect, pid \\ :self) do
     pid = resolve_pid(pid)
+
     Agent.get_and_update(__MODULE__, fn state ->
       effects = Map.get(state, pid, [])
 
       if effect in effects do
-          message = """
-          Effect #{effect} already exists for PID #{inspect(pid)}.
-          Effects dump:
+        message = """
+        Effect #{effect} already exists for PID #{inspect(pid)}.
+        Effects dump:
 
-            #{Enum.join(effects, " ")}
-          """
+          #{Enum.join(effects, " ")}
+        """
 
-          {{:error, message}, state}
+        {{:error, message}, state}
       else
         # IO.inspect [effect | effects], label: "push #{to_string(effect)} pid #{inspect(pid)}"
         {:ok, Map.put(state, pid, [effect | effects])}
@@ -28,6 +29,7 @@ defmodule Sage.EffectsAgent do
 
   def pop_effect!(effect, pid \\ :self) do
     pid = resolve_pid(pid)
+
     Agent.get_and_update(__MODULE__, fn state ->
       effects = Map.get(state, pid, [])
       {last_effect, effects_tail} = List.pop_at(effects, 0)
@@ -63,6 +65,7 @@ defmodule Sage.EffectsAgent do
 
   def delete_effect!(effect, pid \\ :self) do
     pid = resolve_pid(pid)
+
     Agent.get_and_update(__MODULE__, fn state ->
       effects = Map.get(state, pid, [])
 
@@ -88,6 +91,7 @@ defmodule Sage.EffectsAgent do
 
   def list_effects(pid \\ :self) do
     pid = resolve_pid(pid)
+
     Agent.get(__MODULE__, fn state ->
       Map.get(state, pid, [])
     end)

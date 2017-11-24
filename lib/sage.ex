@@ -139,6 +139,14 @@ defmodule Sage do
   and `Sage.UnexpectedCircuitBreakError` is raised. It's the developer responsibility to match operation name
   and failed operation name.
 
+  ## Retries
+
+  After receiving a `{:retry, [retry_limit: limit]}` Sage will retry the transaction on a stage where retry was
+  received.
+
+  Take into account that by doing retires you can increase execution time and block process that executes the Sage,
+  which can produce timeout eg. when you trying to respond to an HTTP request.
+
   ## Compensation guidelines
 
   General rule is that irrespectively to what compensate wants to return, **effect must be always compensated**.
@@ -321,7 +329,7 @@ defmodule Sage do
     end
   end
 
-  defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a)+2)}"
+  defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a) + 2)}"
   defp format_callback(cb), do: "#{inspect(cb)}"
 
   @doc """
@@ -341,11 +349,12 @@ defmodule Sage do
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def execute(sage, opts \\ [])
+
   def execute(%Sage{operations: []}, _opts) do
     raise ArgumentError, "trying to execute empty Sage is not allowed"
   end
-  def execute(%Sage{adapter: adapter} = sage, opts),
-    do: apply(adapter, :execute, [sage, opts])
+
+  def execute(%Sage{adapter: adapter} = sage, opts), do: apply(adapter, :execute, [sage, opts])
 
   @doc """
   Wraps `execute/2` into anonymous function to be run in a Repo transaction.

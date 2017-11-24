@@ -79,7 +79,7 @@ defmodule SageTest do
   describe "to_function/4" do
     test "wraps sage in function" do
       sage = %{new() | adapter: Sage.TestAdapter} |> run(:step1, transaction(:t1))
-      fun = to_function(sage, [foo: "bar"])
+      fun = to_function(sage, foo: "bar")
       assert is_function(fun, 0)
       assert fun.() == {:ok, :executed, %{sage: sage, opts: [foo: "bar"]}}
     end
@@ -93,11 +93,12 @@ defmodule SageTest do
 
     test "executes the sage with opts" do
       sage = %{new() | adapter: Sage.TestAdapter} |> run(:step1, transaction(:t1))
-      assert execute(sage, [foo: "bar"]) == {:ok, :executed, %{sage: sage, opts: [foo: "bar"]}}
+      assert execute(sage, foo: "bar") == {:ok, :executed, %{sage: sage, opts: [foo: "bar"]}}
     end
 
     test "raises when there is no operations to execute" do
       sage = %{new() | adapter: Sage.TestAdapter}
+
       assert_raise ArgumentError, "trying to execute empty Sage is not allowed", fn ->
         execute(sage)
       end
@@ -173,7 +174,7 @@ defmodule SageTest do
     end
   end
 
-  def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise "Not implemented"
-  def dummy_compensation_for_mfa(_effect_to_compensate, _name_and_reason, _opts), do: raise "Not implemented"
-  def dummy_final_cb(_status, _opts, _return), do: raise "Not implemented"
+  def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise("Not implemented")
+  def dummy_compensation_for_mfa(_effect_to_compensate, _name_and_reason, _opts), do: raise("Not implemented")
+  def dummy_final_cb(_status, _opts, _return), do: raise("Not implemented")
 end

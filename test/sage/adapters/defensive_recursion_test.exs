@@ -8,10 +8,10 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, {__MODULE__, :mfa_transaction, [transaction(:t3)]}, compensation())
-        |> assert_finally_succeeds([a: :b])
+        |> assert_finally_succeeds(a: :b)
         |> execute(a: :b)
 
-      assert_effects [:t1, :t2, :t3]
+      assert_effects([:t1, :t2, :t3])
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
@@ -21,15 +21,15 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run_async(:step1, transaction(:t1), not_strict_compensation())
         |> run_async(:step2, transaction(:t2), not_strict_compensation())
         |> run(:step3, fn effects_so_far, opts ->
-          assert effects_so_far == %{step1: :t1, step2: :t2}
-          transaction(:t3).(effects_so_far, opts)
-        end)
-        |> assert_finally_succeeds([a: :b])
+             assert effects_so_far == %{step1: :t1, step2: :t2}
+             transaction(:t3).(effects_so_far, opts)
+           end)
+        |> assert_finally_succeeds(a: :b)
         |> execute(a: :b)
 
-      assert_effect :t1
-      assert_effect :t2
-      assert_effect :t3
+      assert_effect(:t1)
+      assert_effect(:t2)
+      assert_effect(:t3)
 
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
@@ -42,14 +42,14 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run_async(:step3, transaction(:t3), not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run_async(:step5, transaction(:t5), not_strict_compensation())
-        |> assert_finally_succeeds([a: :b])
+        |> assert_finally_succeeds(a: :b)
         |> execute(a: :b)
 
-      assert_effect :t1
-      assert_effect :t2
-      assert_effect :t3
-      assert_effect :t4
-      assert_effect :t5
+      assert_effect(:t1)
+      assert_effect(:t2)
+      assert_effect(:t3)
+      assert_effect(:t4)
+      assert_effect(:t5)
 
       assert result == {:ok, :t5, %{step1: :t1, step2: :t2, step3: :t3, step4: :t4, step5: :t5}}
     end
@@ -76,7 +76,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> assert_finally_fails()
         |> execute(a: :b)
 
-
       assert_no_effects()
       assert result == {:error, :t3}
     end
@@ -96,9 +95,10 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
     test "for executed async transactions when transaction fails" do
       test_pid = self()
+
       cmp = fn effect_to_compensate, name_and_reason, opts ->
         assert name_and_reason == {:step3, :t3}
-        send test_pid, {:compensate, effect_to_compensate}
+        send(test_pid, {:compensate, effect_to_compensate})
         not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
       end
 
@@ -119,8 +119,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
     test "for all started async transaction when one of them failed" do
       test_pid = self()
+
       cmp = fn effect_to_compensate, name_and_reason, opts ->
-        send test_pid, {:compensate, effect_to_compensate}
+        send(test_pid, {:compensate, effect_to_compensate})
         not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
       end
 
@@ -152,7 +153,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> assert_finally_fails()
         |> execute(a: :b)
 
-
       assert_no_effects()
       assert result == {:error, :t2}
     end
@@ -178,8 +178,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when transaction raised an exception" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -204,21 +205,22 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when transaction throws an error" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
       assert catch_throw(
-        new()
-        |> run(:step1, transaction(:t1), compensation_with_retry(3))
-        |> run(:step2, transaction(:t2), compensation())
-        |> run_async(:step3, tx, not_strict_compensation())
-        |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run(:step5, transaction_with_throw(:t5), compensation(:t5))
-        |> assert_finally_fails()
-        |> execute()
-      ) == "error while creating t5"
+               new()
+               |> run(:step1, transaction(:t1), compensation_with_retry(3))
+               |> run(:step2, transaction(:t2), compensation())
+               |> run_async(:step3, tx, not_strict_compensation())
+               |> run_async(:step4, transaction(:t4), not_strict_compensation())
+               |> run(:step5, transaction_with_throw(:t5), compensation(:t5))
+               |> assert_finally_fails()
+               |> execute()
+             ) == "error while creating t5"
 
       # Retries are applying when error is thrown
       assert_receive {:execute, :t3}
@@ -230,21 +232,22 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when transaction exits" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
       assert catch_exit(
-        new()
-        |> run(:step1, transaction(:t1), compensation_with_retry(3))
-        |> run(:step2, transaction(:t2), compensation())
-        |> run_async(:step3, tx, not_strict_compensation())
-        |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run(:step5, transaction_with_exit(:t5), compensation(:t5))
-        |> assert_finally_fails()
-        |> execute()
-      ) == "error while creating t5"
+               new()
+               |> run(:step1, transaction(:t1), compensation_with_retry(3))
+               |> run(:step2, transaction(:t2), compensation())
+               |> run_async(:step3, tx, not_strict_compensation())
+               |> run_async(:step4, transaction(:t4), not_strict_compensation())
+               |> run(:step5, transaction_with_exit(:t5), compensation(:t5))
+               |> assert_finally_fails()
+               |> execute()
+             ) == "error while creating t5"
 
       # Retries are applying when tx exited
       assert_receive {:execute, :t3}
@@ -256,8 +259,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when transaction has malformed return" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -289,8 +293,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when async transaction timed out" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -320,8 +325,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when async transaction raised an exception" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -346,21 +352,22 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when async transaction throws an error" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
       assert catch_throw(
-        new()
-        |> run(:step1, transaction(:t1), compensation_with_retry(3))
-        |> run(:step2, transaction(:t2), compensation())
-        |> run_async(:step3, tx, not_strict_compensation())
-        |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run_async(:step5, transaction_with_throw(:t5), not_strict_compensation(:t5))
-        |> assert_finally_fails()
-        |> execute()
-      ) == "error while creating t5"
+               new()
+               |> run(:step1, transaction(:t1), compensation_with_retry(3))
+               |> run(:step2, transaction(:t2), compensation())
+               |> run_async(:step3, tx, not_strict_compensation())
+               |> run_async(:step4, transaction(:t4), not_strict_compensation())
+               |> run_async(:step5, transaction_with_throw(:t5), not_strict_compensation(:t5))
+               |> assert_finally_fails()
+               |> execute()
+             ) == "error while creating t5"
 
       # Retries are applying when error is thrown
       assert_receive {:execute, :t3}
@@ -372,21 +379,22 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when async transaction exits" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
       assert catch_exit(
-        new()
-        |> run(:step1, transaction(:t1), compensation_with_retry(3))
-        |> run(:step2, transaction(:t2), compensation())
-        |> run_async(:step3, tx, not_strict_compensation())
-        |> run_async(:step4, transaction(:t4), not_strict_compensation())
-        |> run_async(:step5, transaction_with_exit(:t5), not_strict_compensation(:t5))
-        |> assert_finally_fails()
-        |> execute()
-      ) == "error while creating t5"
+               new()
+               |> run(:step1, transaction(:t1), compensation_with_retry(3))
+               |> run(:step2, transaction(:t2), compensation())
+               |> run_async(:step3, tx, not_strict_compensation())
+               |> run_async(:step4, transaction(:t4), not_strict_compensation())
+               |> run_async(:step5, transaction_with_exit(:t5), not_strict_compensation(:t5))
+               |> assert_finally_fails()
+               |> execute()
+             ) == "error while creating t5"
 
       # Retries are applying when tx exited
       assert_receive {:execute, :t3}
@@ -398,8 +406,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "when async transaction has malformed return" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -432,8 +441,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
   test "errors in compensations are raised by default" do
     test_pid = self()
     tx = transaction(:t3)
+
     tx = fn effects_so_far, opts ->
-      send test_pid, {:execute, :t3}
+      send(test_pid, {:execute, :t3})
       tx.(effects_so_far, opts)
     end
 
@@ -452,17 +462,18 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     assert_receive {:execute, :t3}
     refute_receive {:execute, :t3}
 
-    assert_effect :t1
-    assert_effect :t2
-    assert_effect :t3
-    assert_effect :t4
+    assert_effect(:t1)
+    assert_effect(:t2)
+    assert_effect(:t3)
+    assert_effect(:t4)
   end
 
   test "compensations malformed return is reported by default" do
     test_pid = self()
     tx = transaction(:t3)
+
     tx = fn effects_so_far, opts ->
-      send test_pid, {:execute, :t3}
+      send(test_pid, {:execute, :t3})
       tx.(effects_so_far, opts)
     end
 
@@ -488,18 +499,19 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     assert_receive {:execute, :t3}
     refute_receive {:execute, :t3}
 
-    assert_effect :t1
-    assert_effect :t2
-    assert_effect :t3
-    assert_effect :t4
+    assert_effect(:t1)
+    assert_effect(:t2)
+    assert_effect(:t3)
+    assert_effect(:t4)
   end
 
   describe "compensation error handler" do
     test "can resume compensation of effects on exception" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -517,14 +529,15 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       assert_receive {:execute, :t3}
       refute_receive {:execute, :t3}
 
-      assert_effects [:t2]
+      assert_effects([:t2])
     end
 
     test "can resume compensation of effects on exit" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -548,8 +561,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "can resume compensation of effects on throw" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -573,8 +587,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "can resume compensation of effects on malformed return" do
       test_pid = self()
       tx = transaction(:t3)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t3}
+        send(test_pid, {:execute, :t3})
         tx.(effects_so_far, opts)
       end
 
@@ -632,7 +647,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run(:step1, transaction(:t1), compensation())
         |> execute()
 
-      assert_effects [:t1]
+      assert_effects([:t1])
       assert result == {:ok, :t1, %{step1: :t1}}
     end
 
@@ -649,7 +664,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       assert_receive :ok
       assert_receive :ok
 
-      assert_effects [:t1]
+      assert_effects([:t1])
       assert result == {:ok, :t1, %{step1: :t1}}
     end
 
@@ -682,12 +697,12 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
       final_hook_with_throw = fn status, _opts ->
         send(test_pid, status)
-        throw "Final hook threw an error"
+        throw("Final hook threw an error")
       end
 
       final_hook_with_exit = fn status, _opts ->
         send(test_pid, status)
-        exit "Final hook exited"
+        exit("Final hook exited")
       end
 
       log =
@@ -702,7 +717,6 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
             |> finally({__MODULE__, :final_hook_with_throw, [test_pid]})
             |> finally({__MODULE__, :final_hook_with_exit, [test_pid]})
             |> execute(a: :b)
-
 
           assert_no_effects()
           assert result == {:error, :t1}
@@ -729,6 +743,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
   describe "global options" do
     test "are sent to transaction" do
       execute_opts = %{foo: "bar"}
+
       tx = fn effects_so_far, opts ->
         assert opts == execute_opts
         transaction(:t1).(effects_so_far, opts)
@@ -741,11 +756,12 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
       assert result == {:ok, :t1, %{step1: :t1}}
 
-      assert_effects [:t1]
+      assert_effects([:t1])
     end
 
     test "are sent to compensation" do
       execute_opts = %{foo: "bar"}
+
       cmp = fn effect_to_compensate, name_and_reason, opts ->
         assert opts == execute_opts
         assert name_and_reason == {:step1, :t1}
@@ -763,6 +779,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
     test "are sent to final hook" do
       execute_opts = %{foo: "bar"}
+
       final_hook = fn state, opts ->
         assert state == :ok
         assert opts == execute_opts
@@ -774,7 +791,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> finally(final_hook)
         |> execute(execute_opts)
 
-      assert_effects [:t1]
+      assert_effects([:t1])
       assert result == {:ok, :t1, %{step1: :t1}}
     end
   end
@@ -783,8 +800,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "are executing transactions again" do
       test_pid = self()
       tx = transaction(:t2)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t2}
+        send(test_pid, {:execute, :t2})
         tx.(effects_so_far, opts)
       end
 
@@ -793,22 +811,23 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
         |> run(:step1, transaction(:t1), compensation_with_retry(3))
         |> run(:step2, tx, compensation())
         |> run(:step3, transaction_with_n_errors(2, :t3), compensation())
-        |> assert_finally_succeeds([a: :b])
+        |> assert_finally_succeeds(a: :b)
         |> execute(a: :b)
 
       assert_receive {:execute, :t2}
       assert_receive {:execute, :t2}
       assert_receive {:execute, :t2}
 
-      assert_effects [:t1, :t2, :t3]
+      assert_effects([:t1, :t2, :t3])
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
     test "are ignored when retry limit exceeded" do
       test_pid = self()
       tx = transaction(:t2)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t2}
+        send(test_pid, {:execute, :t2})
         tx.(effects_so_far, opts)
       end
 
@@ -832,8 +851,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "are ignored when compensation aborted the sage" do
       test_pid = self()
       tx = transaction(:t2)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t2}
+        send(test_pid, {:execute, :t2})
         tx.(effects_so_far, opts)
       end
 
@@ -855,8 +875,9 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     test "are ignored when transaction aborted the sage" do
       test_pid = self()
       tx = transaction(:t2)
+
       tx = fn effects_so_far, opts ->
-        send test_pid, {:execute, :t2}
+        send(test_pid, {:execute, :t2})
         tx.(effects_so_far, opts)
       end
 
@@ -922,8 +943,8 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
 
   def do_send(msg, _opts, pid), do: send(pid, msg)
 
-  def mfa_transaction(effects_so_far, opts, cb),
-    do: cb.(effects_so_far, opts)
+  def mfa_transaction(effects_so_far, opts, cb), do: cb.(effects_so_far, opts)
+
   def mfa_compensation(effect_to_compensate, name_and_reason, opts, cb),
     do: cb.(effect_to_compensate, name_and_reason, opts)
 
