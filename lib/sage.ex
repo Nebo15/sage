@@ -232,7 +232,8 @@ defmodule Sage do
   Registers tracer for a Sage execution.
   Tracing module must implement `Sage.Tracer` behaviour.
 
-  Registering duplicated tracing callback is not allowed and would raise an exception.
+  Registering duplicated tracing callback is not allowed and would raise an
+  `Sage.DuplicateTracerError` exception.
 
   All errors during execution of a tracing callbacks would be logged, but it won't affect Sage execution.
 
@@ -244,13 +245,9 @@ defmodule Sage do
     %{sage | tracers: MapSet.put(sage.tracers, module)}
   end
 
-  defp raise_on_duplicate_tracer!(%{tracers: tracers}, module) do
+  defp raise_on_duplicate_tracer!(%{tracers: tracers} = sage, module) do
     if MapSet.member?(tracers, module) do
-      message = """
-      module #{inspect(module)} is already registered for tracing
-      """
-
-      raise ArgumentError, message
+      raise Sage.DuplicateTracerError, sage: sage, module: module
     end
   end
 
@@ -303,7 +300,8 @@ defmodule Sage do
   @doc """
   Appends a sage with a function that will be triggered after sage success or abort.
 
-  Registering duplicated final callback is not allowed and would raise an exception.
+  Registering duplicated final callback is not allowed and would raise
+  an `Sage.DuplicateFinalHookError` exception.
 
   For callback specification see `t:finally/0`.
   """
@@ -319,18 +317,11 @@ defmodule Sage do
     %{sage | finally: MapSet.put(sage.finally, mfa)}
   end
 
-  defp raise_on_duplicate_final_hook!(%{finally: finally}, callback) do
+  defp raise_on_duplicate_final_hook!(%{finally: finally} = sage, callback) do
     if MapSet.member?(finally, callback) do
-      message = """
-      #{format_callback(callback)} is already registered as final hook
-      """
-
-      raise ArgumentError, message
+      raise Sage.DuplicateFinalHookError, sage: sage, callback: callback
     end
   end
-
-  defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a) + 2)}"
-  defp format_callback(cb), do: "#{inspect(cb)}"
 
   @doc """
   Executes a Sage.
@@ -351,7 +342,7 @@ defmodule Sage do
   def execute(sage, opts \\ [])
 
   def execute(%Sage{operations: []}, _opts) do
-    raise ArgumentError, "trying to execute empty Sage is not allowed"
+    raise Sage.EmptyError
   end
 
   def execute(%Sage{adapter: adapter} = sage, opts), do: apply(adapter, :execute, [sage, opts])

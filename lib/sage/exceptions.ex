@@ -1,3 +1,15 @@
+defmodule Sage.EmptyError do
+  @moduledoc """
+  Raised at runtime when empty sage is executed.
+  """
+  defexception [:message]
+
+  def exception(_opts) do
+    message = "trying to execute empty Sage is not allowed"
+    %__MODULE__{message: message}
+  end
+end
+
 defmodule Sage.UnexpectedCircuitBreakError do
   @moduledoc """
   Raised at runtime when the compensation tries to apply circuit breaker
@@ -11,18 +23,11 @@ defmodule Sage.UnexpectedCircuitBreakError do
     breaker on a failure which occurred on transaction
     #{to_string(failed_transaction_name)} which it is not responsible for.
 
-    If you trying to implement circuit breaker, always match for a
-    failed operation name in compensating function:
+    When implementing circuit breaker, always match for a
+    failed operation name in compensating function. For more details see
+    https://hexdocs.pm/sage/Sage.html#t:compensation/0-circuit-breaker.
 
-    compensation =
-      fn
-        effect_to_compensate, {:my_step, _failure_reason}, _opts ->
-          # 1. Compensate the side effect
-          # 2. Continue with circuit breaker
-
-        effect_to_compensate, {_not_my_step, _failure_reason}, _opts ->
-          # Compensate the side effect
-      end
+    Sage execution is aborted.
     """
   end
 end
@@ -35,7 +40,7 @@ defmodule Sage.AsyncTransactionTimeoutError do
 
   def message(%__MODULE__{name: name, timeout: timeout}) do
     """
-    asynchronous transaction for operation #{name} timed out,
+    asynchronous transaction for operation #{name} has timed out,
     expected it to return within #{to_string(timeout)} microseconds
     """
   end
@@ -61,6 +66,49 @@ defmodule Sage.DuplicateOperationError do
   end
 end
 
+defmodule Sage.DuplicateTracerError do
+  @moduledoc """
+  Raised at runtime when a duplicated tracer is added to Sage.
+  """
+  defexception [:message]
+
+  def exception(opts) do
+    sage = Keyword.fetch!(opts, :sage)
+    module = Keyword.fetch!(opts, :module)
+
+    message = """
+    #{inspect(module)} is already defined as tracer for Sage:
+
+      #{inspect(sage)}
+    """
+
+    %__MODULE__{message: message}
+  end
+end
+
+defmodule Sage.DuplicateFinalHookError do
+  @moduledoc """
+  Raised at runtime when duplicated final hook is added to Sage.
+  """
+  defexception [:message]
+
+  def exception(opts) do
+    sage = Keyword.fetch!(opts, :sage)
+    callback = Keyword.fetch!(opts, :callback)
+
+    message = """
+    #{format_callback(callback)} is already defined as final hook for Sage:
+
+      #{inspect(sage)}
+    """
+
+    %__MODULE__{message: message}
+  end
+
+  defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a) + 2)}"
+  defp format_callback(cb), do: "#{inspect(cb)}"
+end
+
 defmodule Sage.MalformedTransactionReturnError do
   @moduledoc """
   Raised at runtime when the transaction or operation has an malformed return.
@@ -69,8 +117,8 @@ defmodule Sage.MalformedTransactionReturnError do
 
   def message(%__MODULE__{transaction: transaction, return: return}) do
     """
-    unexpected return from transaction #{inspect(transaction)},
-    expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+    expected transaction #{inspect(transaction)} to return
+    {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
       #{inspect(return)}
     """
@@ -85,8 +133,8 @@ defmodule Sage.MalformedCompensationReturnError do
 
   def message(%__MODULE__{compensation: compensation, return: return}) do
     """
-    unexpected return from compensation #{inspect(compensation)},
-    expected it to be :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
+    expected compensation #{inspect(compensation)} to return
+    :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
 
       #{inspect(return)}
     """

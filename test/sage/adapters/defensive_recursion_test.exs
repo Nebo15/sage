@@ -266,8 +266,8 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       end
 
       message = ~r"""
-      ^unexpected return from transaction .*,
-      expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+      ^expected transaction .* to return
+      {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
         {:bad_returns, :are_bad_mmmkay}$
       """
@@ -300,7 +300,7 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       end
 
       message = """
-      asynchronous transaction for operation step5 timed out,
+      asynchronous transaction for operation step5 has timed out,
       expected it to return within 10 microseconds
       """
 
@@ -413,8 +413,8 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       end
 
       message = ~r"""
-      ^unexpected return from transaction .*,
-      expected it to be {:ok, effect}, {:error, reason} or {:abort, reason}, got:
+      ^expected transaction .* to return
+      {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
         {:bad_returns, :are_bad_mmmkay}$
       """
@@ -478,8 +478,8 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
     end
 
     message = ~r"""
-    ^unexpected return from compensation .*,
-    expected it to be :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
+    ^expected compensation .* to return
+    :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
 
       {:bad_returns, :are_bad_mmmkay}$
     """
@@ -915,18 +915,11 @@ defmodule Sage.Adapters.DefensiveRecursionTest do
       breaker on a failure which occurred on transaction
       step2 which it is not responsible for.
 
-      If you trying to implement circuit breaker, always match for a
-      failed operation name in compensating function:
+      When implementing circuit breaker, always match for a
+      failed operation name in compensating function. For more details see
+      https://hexdocs.pm/sage/Sage.html#t:compensation/0-circuit-breaker.
 
-      compensation =
-        fn
-          effect_to_compensate, {:my_step, _failure_reason}, _opts ->
-            # 1. Compensate the side effect
-            # 2. Continue with circuit breaker
-
-          effect_to_compensate, {_not_my_step, _failure_reason}, _opts ->
-            # Compensate the side effect
-        end
+      Sage execution is aborted.
       """
 
       assert_raise Sage.UnexpectedCircuitBreakError, message, fn ->

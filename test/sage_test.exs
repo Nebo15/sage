@@ -20,11 +20,8 @@ defmodule SageTest do
     end
 
     test "raises on duplicate tracers" do
-      message = """
-      module Sage.TestTracer is already registered for tracing
-      """
-
-      assert_raise ArgumentError, message, fn ->
+      message = ~r"Sage.TestTracer is already defined as tracer for Sage:"
+      assert_raise Sage.DuplicateTracerError, message, fn ->
         new()
         |> with_tracer(Sage.TestTracer)
         |> with_tracer(Sage.TestTracer)
@@ -50,11 +47,8 @@ defmodule SageTest do
     end
 
     test "raises on duplicate mfa hook" do
-      message = """
-      SageTest.dummy_final_cb/3 is already registered as final hook
-      """
-
-      assert_raise ArgumentError, message, fn ->
+      message = ~r"SageTest.dummy_final_cb/3 is already defined as final hook for Sage:"
+      assert_raise Sage.DuplicateFinalHookError, message, fn ->
         new()
         |> finally({__MODULE__, :dummy_final_cb, [:ok]})
         |> finally({__MODULE__, :dummy_final_cb, [:ok]})
@@ -64,11 +58,8 @@ defmodule SageTest do
     test "raises on duplicate callback" do
       cb = fn _, _ -> :ok end
 
-      message = """
-      #{inspect(cb)} is already registered as final hook
-      """
-
-      assert_raise ArgumentError, message, fn ->
+      message = ~r"#{inspect(cb)} is already defined as final hook for Sage:"
+      assert_raise Sage.DuplicateFinalHookError, message, fn ->
         new()
         |> finally(cb)
         |> finally(cb)
@@ -99,7 +90,7 @@ defmodule SageTest do
     test "raises when there is no operations to execute" do
       sage = %{new() | adapter: Sage.TestAdapter}
 
-      assert_raise ArgumentError, "trying to execute empty Sage is not allowed", fn ->
+      assert_raise Sage.EmptyError, "trying to execute empty Sage is not allowed", fn ->
         execute(sage)
       end
     end
