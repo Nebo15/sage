@@ -10,9 +10,15 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   @impl true
   def execute(%Sage{} = sage, opts) do
-    %{operations: operations, finally: finally, on_compensation_error: on_compensation_error, tracers: tracers} = sage
+    %{
+      operations: operations,
+      final_hooks: final_hooks,
+      on_compensation_error: on_compensation_error,
+      tracers: tracers
+    } = sage
+
     inital_state = {nil, %{}, {1, []}, false, [], on_compensation_error, {MapSet.to_list(tracers), opts}}
-    final_hooks = MapSet.to_list(finally)
+    final_hooks = MapSet.to_list(final_hooks)
 
     operations
     |> Enum.reverse()

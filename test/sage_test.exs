@@ -32,18 +32,18 @@ defmodule SageTest do
   describe "finally/2" do
     test "registers tracing hook with anonymous function" do
       sage = new()
-      assert MapSet.equal?(sage.finally, MapSet.new())
+      assert MapSet.equal?(sage.final_hooks, MapSet.new())
       cb = fn _, _ -> :ok end
       sage = finally(sage, cb)
-      assert MapSet.equal?(sage.finally, MapSet.new([cb]))
+      assert MapSet.equal?(sage.final_hooks, MapSet.new([cb]))
     end
 
     test "registers tracing hook with mfa tuple" do
       sage = new()
-      assert MapSet.equal?(sage.finally, MapSet.new())
+      assert MapSet.equal?(sage.final_hooks, MapSet.new())
       cb = {__MODULE__, :dummy_final_cb, [:ok]}
       sage = finally(sage, cb)
-      assert MapSet.equal?(sage.finally, MapSet.new([cb]))
+      assert MapSet.equal?(sage.final_hooks, MapSet.new([cb]))
     end
 
     test "raises on duplicate mfa hook" do

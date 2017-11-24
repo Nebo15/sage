@@ -94,7 +94,7 @@ defmodule Sage.DuplicateFinalHookError do
 
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
-    callback = Keyword.fetch!(opts, :callback)
+    callback = Keyword.fetch!(opts, :hook)
 
     message = """
     #{format_callback(callback)} is already defined as final hook for Sage:

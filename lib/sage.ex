@@ -168,21 +168,21 @@ defmodule Sage do
           | mfa()
 
   @typedoc """
-  Final callback.
+  Final hook.
 
   It receives `:ok` if all transactions are successfully completed or `:error` otherwise
   and options passed to the `execute/2`.
 
   Return is ignored.
   """
-  @type finally :: (:ok | :error, execute_opts :: any() -> no_return()) | mfa()
+  @type final_hook :: (:ok | :error, execute_opts :: any() -> no_return()) | mfa()
 
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
   @type t :: %__MODULE__{
           operations: [{name(), operation()}],
           operation_names: MapSet.t(),
-          finally: MapSet.t(finally()),
+          final_hooks: MapSet.t(final_hook()),
           on_compensation_error: :raise | module(),
           tracers: MapSet.t(module()),
           adapter: module()
@@ -190,7 +190,7 @@ defmodule Sage do
 
   defstruct operations: [],
             operation_names: MapSet.new(),
-            finally: MapSet.new(),
+            final_hooks: MapSet.new(),
             on_compensation_error: :raise,
             tracers: MapSet.new(),
             adapter: Sage.Adapters.DefensiveRecursion
@@ -250,6 +250,32 @@ defmodule Sage do
   end
 
   @doc """
+  Appends the Sage with a function that will be triggered after Sage execution.
+
+  Registering duplicated final hook is not allowed and would raise
+  an `Sage.DuplicateFinalHookError` exception.
+
+  For hook specification see `t:final_hook/0`.
+  """
+  @spec finally(sage :: t(), hook :: final_hook()) :: t()
+  def finally(%Sage{} = sage, hook) when is_function(hook, 2) do
+    raise_on_duplicate_final_hook!(sage, hook)
+    %{sage | final_hooks: MapSet.put(sage.final_hooks, hook)}
+  end
+
+  def finally(%Sage{} = sage, {module, function, arguments} = mfa)
+      when is_atom(module) and is_atom(function) and is_list(arguments) do
+    raise_on_duplicate_final_hook!(sage, mfa)
+    %{sage | final_hooks: MapSet.put(sage.final_hooks, mfa)}
+  end
+
+  defp raise_on_duplicate_final_hook!(%{final_hooks: final_hooks} = sage, hook) do
+    if MapSet.member?(final_hooks, hook) do
+      raise Sage.DuplicateFinalHookError, sage: sage, hook: hook
+    end
+  end
+
+  @doc """
   Appends sage with an transaction and function to compensate it's effect.
 
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
@@ -297,32 +323,6 @@ defmodule Sage do
     do: add_operation(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
-  Appends a sage with a function that will be triggered after sage success or abort.
-
-  Registering duplicated final callback is not allowed and would raise
-  an `Sage.DuplicateFinalHookError` exception.
-
-  For callback specification see `t:finally/0`.
-  """
-  @spec finally(sage :: t(), callback :: finally()) :: t()
-  def finally(%Sage{} = sage, callback) when is_function(callback, 2) do
-    raise_on_duplicate_final_hook!(sage, callback)
-    %{sage | finally: MapSet.put(sage.finally, callback)}
-  end
-
-  def finally(%Sage{} = sage, {module, function, arguments} = mfa)
-      when is_atom(module) and is_atom(function) and is_list(arguments) do
-    raise_on_duplicate_final_hook!(sage, mfa)
-    %{sage | finally: MapSet.put(sage.finally, mfa)}
-  end
-
-  defp raise_on_duplicate_final_hook!(%{finally: finally} = sage, callback) do
-    if MapSet.member?(finally, callback) do
-      raise Sage.DuplicateFinalHookError, sage: sage, callback: callback
-    end
-  end
-
-  @doc """
   Executes a Sage.
 
   Optionally, you can pass global options in `opts`, that will be sent to
@@ -347,7 +347,7 @@ defmodule Sage do
   def execute(%Sage{adapter: adapter} = sage, opts), do: apply(adapter, :execute, [sage, opts])
 
   @doc """
-  Wraps `execute/2` into anonymous function to be run in a Repo transaction.
+  Wraps `execute/2` into anonymous function to be run with a `Ecto.Repo.transaction/1`.
   """
   @spec to_function(sage :: t(), opts :: any()) :: function()
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
