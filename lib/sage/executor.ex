@@ -35,7 +35,6 @@ defmodule Sage.Executor do
     if tasks == [] do
       {:ok, last_effect, effects_so_far}
     else
-      # TODO: Do actual return in execute_next_operation?
       {:next_transaction, state}
       |> maybe_await_for_tasks(tasks)
       |> handle_transaction_result()
@@ -46,7 +45,6 @@ defmodule Sage.Executor do
   defp execute_transactions([{name, operation} | ops], executed_ops, opts, state) do
     {_last_effect_or_error, _effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
 
-    # TODO: Remove second tuple here
     {{name, operation}, state}
     |> maybe_await_for_tasks(tasks)
     |> maybe_execute_transaction(opts)
