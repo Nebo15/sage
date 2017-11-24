@@ -3,6 +3,7 @@ cache:
   directories:
   - deps
   - _build/dev
+  - _build/test
 elixir:
   - 1.5.0
 otp_release:
