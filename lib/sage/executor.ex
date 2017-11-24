@@ -1,14 +1,14 @@
-defmodule Sage.Adapters.DefensiveRecursion do
+defmodule Sage.Executor do
   @moduledoc """
-  This module is responsible for Sage execution implementation.
+  This module is responsible for Sage execution.
   """
-  @behaviour Sage.Adapter
   require Logger
 
   # # Inline functions for performance optimization
   # @compile {:inline, encode_integer: 1, encode_float: 1}
 
-  @impl true
+  @spec execute(sage :: Sage.t(), opts :: any()) ::
+              {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
   def execute(%Sage{} = sage, opts) do
     %{
       operations: operations,

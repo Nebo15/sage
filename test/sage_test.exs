@@ -69,27 +69,26 @@ defmodule SageTest do
 
   describe "to_function/4" do
     test "wraps sage in function" do
-      sage = %{new() | adapter: Sage.TestAdapter} |> run(:step1, transaction(:t1))
+      sage = new() |> run(:step1, fn %{}, foo: "bar" -> {:ok, :t1} end)
       fun = to_function(sage, foo: "bar")
       assert is_function(fun, 0)
-      assert fun.() == {:ok, :executed, %{sage: sage, opts: [foo: "bar"]}}
+      assert fun.() == {:ok, :t1, %{step1: :t1}}
     end
   end
 
   describe "execute/4" do
     test "executes the sage" do
-      sage = %{new() | adapter: Sage.TestAdapter} |> run(:step1, transaction(:t1))
-      assert execute(sage) == {:ok, :executed, %{sage: sage, opts: []}}
+      sage = new() |> run(:step1, fn %{}, [] -> {:ok, :t1} end)
+      assert execute(sage) == {:ok, :t1, %{step1: :t1}}
     end
 
     test "executes the sage with opts" do
-      sage = %{new() | adapter: Sage.TestAdapter} |> run(:step1, transaction(:t1))
-      assert execute(sage, foo: "bar") == {:ok, :executed, %{sage: sage, opts: [foo: "bar"]}}
+      sage = new() |> run(:step1, fn %{}, foo: "bar" -> {:ok, :t1} end)
+      assert execute(sage, foo: "bar") == {:ok, :t1, %{step1: :t1}}
     end
 
     test "raises when there is no operations to execute" do
-      sage = %{new() | adapter: Sage.TestAdapter}
-
+      sage = new()
       assert_raise Sage.EmptyError, "trying to execute empty Sage is not allowed", fn ->
         execute(sage)
       end

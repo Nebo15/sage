@@ -1,4 +1,4 @@
-defmodule Sage.Adapters.DefensiveRecursionTest do
+defmodule Sage.ExecutorTest do
   use Sage.EffectsCase
 
   describe "transactions" do

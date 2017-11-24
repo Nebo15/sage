@@ -184,16 +184,14 @@ defmodule Sage do
           operation_names: MapSet.t(),
           final_hooks: MapSet.t(final_hook()),
           on_compensation_error: :raise | module(),
-          tracers: MapSet.t(module()),
-          adapter: module()
+          tracers: MapSet.t(module())
         }
 
   defstruct operations: [],
             operation_names: MapSet.new(),
             final_hooks: MapSet.new(),
             on_compensation_error: :raise,
-            tracers: MapSet.new(),
-            adapter: Sage.Adapters.DefensiveRecursion
+            tracers: MapSet.new()
 
   @doc false
   def start(_type, _args) do
@@ -339,12 +337,8 @@ defmodule Sage do
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def execute(sage, opts \\ [])
-
-  def execute(%Sage{operations: []}, _opts) do
-    raise Sage.EmptyError
-  end
-
-  def execute(%Sage{adapter: adapter} = sage, opts), do: apply(adapter, :execute, [sage, opts])
+  def execute(%Sage{operations: []}, _opts), do: raise Sage.EmptyError
+  def execute(%Sage{} = sage, opts), do: Sage.Executor.execute(sage, opts)
 
   @doc """
   Wraps `execute/2` into anonymous function to be run with a `Ecto.Repo.transaction/1`.
