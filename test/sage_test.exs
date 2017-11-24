@@ -21,6 +21,7 @@ defmodule SageTest do
 
     test "raises on duplicate tracers" do
       message = ~r"Sage.TestTracer is already defined as tracer for Sage:"
+
       assert_raise Sage.DuplicateTracerError, message, fn ->
         new()
         |> with_tracer(Sage.TestTracer)
@@ -48,6 +49,7 @@ defmodule SageTest do
 
     test "raises on duplicate mfa hook" do
       message = ~r"SageTest.dummy_final_cb/3 is already defined as final hook for Sage:"
+
       assert_raise Sage.DuplicateFinalHookError, message, fn ->
         new()
         |> finally({__MODULE__, :dummy_final_cb, [:ok]})
@@ -59,6 +61,7 @@ defmodule SageTest do
       cb = fn _, _ -> :ok end
 
       message = ~r"#{inspect(cb)} is already defined as final hook for Sage:"
+
       assert_raise Sage.DuplicateFinalHookError, message, fn ->
         new()
         |> finally(cb)
@@ -89,6 +92,7 @@ defmodule SageTest do
 
     test "raises when there is no operations to execute" do
       sage = new()
+
       assert_raise Sage.EmptyError, "trying to execute empty Sage is not allowed", fn ->
         execute(sage)
       end

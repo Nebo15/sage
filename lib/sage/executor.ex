@@ -7,8 +7,7 @@ defmodule Sage.Executor do
   # # Inline functions for performance optimization
   # @compile {:inline, encode_integer: 1, encode_float: 1}
 
-  @spec execute(sage :: Sage.t(), opts :: any()) ::
-              {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
+  @spec execute(sage :: Sage.t(), opts :: any()) :: {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
   def execute(%Sage{} = sage, opts) do
     %{
       operations: operations,
@@ -490,13 +489,16 @@ defmodule Sage.Executor do
   end
 
   defp maybe_log_errors({from, {:throw, reason}}) do
-    Logger.error("[Sage] Throw during #{callback_to_string(from)} final hook execution is ignored. " <>
-                 "Error: #{inspect(reason)}")
+    Logger.error(
+      "[Sage] Throw during #{callback_to_string(from)} final hook execution is ignored. " <> "Error: #{inspect(reason)}"
+    )
   end
 
   defp maybe_log_errors({from, {:exit, reason}}) do
-    Logger.error("[Sage] Exit during #{callback_to_string(from)} final hook execution is ignored. " <>
-                 "Exit reason: #{inspect(reason)}")
+    Logger.error(
+      "[Sage] Exit during #{callback_to_string(from)} final hook execution is ignored. " <>
+        "Exit reason: #{inspect(reason)}"
+    )
   end
 
   defp maybe_log_errors({_from, _other}) do

@@ -315,8 +315,13 @@ defmodule Sage do
     * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
     `:infinity` will wait indefinitely (default: 5000);
   """
-  @spec run_async(sage :: t(), name :: name(), transaction :: transaction(), compensation :: compensation(), opts :: async_opts()) ::
-          t()
+  @spec run_async(
+          sage :: t(),
+          name :: name(),
+          transaction :: transaction(),
+          compensation :: compensation(),
+          opts :: async_opts()
+        ) :: t()
   def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
     do: add_operation(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
@@ -337,7 +342,7 @@ defmodule Sage do
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def execute(sage, opts \\ [])
-  def execute(%Sage{operations: []}, _opts), do: raise Sage.EmptyError
+  def execute(%Sage{operations: []}, _opts), do: raise(Sage.EmptyError)
   def execute(%Sage{} = sage, opts), do: Sage.Executor.execute(sage, opts)
 
   @doc """
