@@ -23,7 +23,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   # Transactions
 
-  defp execute_transactions([], executed_operations, opts, state) do
+  defp execute_transactions([], executed_ops, opts, state) do
     {last_effect, effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
 
     if tasks == [] do
@@ -33,11 +33,11 @@ defmodule Sage.Adapters.DefensiveRecursion do
       {:next_transaction, state}
       |> maybe_await_for_tasks(tasks)
       |> handle_transaction_result()
-      |> execute_next_operation([], executed_operations, opts)
+      |> execute_next_operation([], executed_ops, opts)
     end
   end
 
-  defp execute_transactions([{name, operation} | operations], executed_operations, opts, state) do
+  defp execute_transactions([{name, operation} | ops], executed_ops, opts, state) do
     {_last_effect_or_error, _effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
 
     # TODO: Remove second tuple here
@@ -45,7 +45,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
     |> maybe_await_for_tasks(tasks)
     |> maybe_execute_transaction(opts)
     |> handle_transaction_result()
-    |> execute_next_operation(operations, executed_operations, opts)
+    |> execute_next_operation(ops, executed_ops, opts)
   end
 
   defp maybe_await_for_tasks({operation, state}, []), do: {operation, state}
@@ -181,7 +181,8 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp handle_transaction_result({name, operation, {%Task{}, _async_opts} = async_job, state}) do
     {last_effect_or_error, effects_so_far, retries, _abort?, tasks, on_compensation_error, tracers} = state
-    state = {last_effect_or_error, effects_so_far, retries, false, [{name, async_job} | tasks], on_compensation_error, tracers}
+    tasks = [{name, async_job} | tasks]
+    state = {last_effect_or_error, effects_so_far, retries, false, tasks, on_compensation_error, tracers}
     {:next_transaction, {name, operation}, state}
   end
 
@@ -223,14 +224,14 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   # Compensation
 
-  defp execute_compensations(compensated_operations, [{name, operation} | operations], opts, state) do
+  defp execute_compensations(compensated_ops, [{name, operation} | ops], opts, state) do
     {{name, operation}, state}
     |> execute_compensation(opts)
     |> handle_compensation_result()
-    |> execute_next_operation(compensated_operations, operations, opts)
+    |> execute_next_operation(compensated_ops, ops, opts)
   end
 
-  defp execute_compensations(_compensated_operations, [], _opts, state) do
+  defp execute_compensations(_compensated_ops, [], _opts, state) do
     {last_error, %{}, _retries, _abort?, [], _on_compensation_error, _tracers} = state
 
     case last_error do
@@ -329,54 +330,56 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp handle_compensation_result({name, operation, {:raise, _} = to_raise, compensated_effect, state}) do
     state = put_elem(state, 0, to_raise)
-    {:compensation_error_handler, {name, operation, compensated_effect}, state}
+    {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   defp handle_compensation_result({name, operation, {:exit, _reason} = error, compensated_effect, state}) do
     state = put_elem(state, 0, error)
-    {:compensation_error_handler, {name, operation, compensated_effect}, state}
+    {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   defp handle_compensation_result({name, operation, {:throw, _error} = error, compensated_effect, state}) do
     state = put_elem(state, 0, error)
-    {:compensation_error_handler, {name, operation, compensated_effect}, state}
+    {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   # Shared
 
-  defp execute_next_operation({:next_transaction, {name, operation}, state}, operations, executed_operations, opts) do
-    execute_transactions(operations, [{name, operation} | executed_operations], opts, state)
+  defp execute_next_operation({:next_transaction, {name, operation}, state}, ops, executed_ops, opts) do
+    execute_transactions(ops, [{name, operation} | executed_ops], opts, state)
   end
 
-  defp execute_next_operation({:next_transaction, state}, [], [{prev_name, _prev_operation} | executed_operations], opts) do
+  defp execute_next_operation({:next_transaction, state}, [], [{prev_name, _prev_op} | executed_ops], opts) do
     {_last_effect_or_error, effects_so_far, _retries, _abort?, [], _on_compensation_error, _tracers} = state
     state = put_elem(state, 0, Map.get(effects_so_far, prev_name))
-    execute_transactions([], executed_operations, opts, state)
+    execute_transactions([], executed_ops, opts, state)
   end
 
-  defp execute_next_operation({:start_compensations, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_compensations(compensated_operations, [{name, operation} | operations], opts, state)
+  defp execute_next_operation({:start_compensations, {name, operation}, state}, compensated_ops, ops, opts) do
+    execute_compensations(compensated_ops, [{name, operation} | ops], opts, state)
   end
 
-  defp execute_next_operation({:start_compensations, state}, compensated_operations, operations, opts) do
-    execute_compensations(compensated_operations, operations, opts, state)
+  defp execute_next_operation({:start_compensations, state}, compensated_ops, ops, opts) do
+    execute_compensations(compensated_ops, ops, opts, state)
   end
 
-  defp execute_next_operation({:next_compensation, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_compensations([{name, operation} | compensated_operations], operations, opts, state)
+  defp execute_next_operation({:next_compensation, {name, operation}, state}, compensated_ops, ops, opts) do
+    execute_compensations([{name, operation} | compensated_ops], ops, opts, state)
   end
 
-  defp execute_next_operation({:retry_transaction, {name, operation}, state}, compensated_operations, operations, opts) do
-    execute_transactions([{name, operation} | compensated_operations], operations, opts, state)
+  defp execute_next_operation({:retry_transaction, {name, operation}, state}, compensated_ops, ops, opts) do
+    execute_transactions([{name, operation} | compensated_ops], ops, opts, state)
   end
 
-  defp execute_next_operation({:compensation_error_handler, {name, operation, compensated_effect}, state}, _compensated_operations, operations, opts) do
+  defp execute_next_operation({:compensation_error, compensation_error, state}, _compensated_ops, ops, opts) do
+    {name, operation, compensated_effect} = compensation_error
     {error, effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
+
     if on_compensation_error == :raise do
       return_or_reraise(error)
     else
       compensations_to_run =
-        [{name, operation} | operations]
+        [{name, operation} | ops]
         |> Enum.reduce([], fn
              {_name, {_type, _operation, :noop, _tx_opts}}, acc ->
                acc
