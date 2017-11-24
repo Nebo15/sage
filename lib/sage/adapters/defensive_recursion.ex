@@ -127,9 +127,8 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
     apply_transaction_fun(transaction, effects_so_far, opts)
-  rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
   catch
+    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end
@@ -258,9 +257,8 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp safe_apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts) do
     apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts)
-  rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
   catch
+    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, error -> {:throw, error}
   else
@@ -437,7 +435,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
   def maybe_notify_tracers({tracers, tracing_state}, action, name) do
     tracing_state =
       Enum.reduce(tracers, tracing_state, fn tracer, tracing_state ->
-        apply_and_resque_errors(tracer, :handle_event, [name, action, tracing_state])
+        apply_and_catch_errors(tracer, :handle_event, [name, action, tracing_state])
       end)
 
     {tracers, tracing_state}
@@ -452,32 +450,29 @@ defmodule Sage.Adapters.DefensiveRecursion do
     |> Enum.map(fn
          {module, function, args} ->
            args = [status, opts | args]
-           {{module, function, args}, apply_and_resque_errors(module, function, args)}
+           {{module, function, args}, apply_and_catch_errors(module, function, args)}
 
          callback ->
            args = [status, opts]
-           {{callback, args}, apply_and_resque_errors(callback, args)}
+           {{callback, args}, apply_and_catch_errors(callback, args)}
        end)
     |> Enum.map(&maybe_log_errors/1)
 
     result
   end
 
-  defp apply_and_resque_errors(module, function, arguments) do
+  defp apply_and_catch_errors(module, function, arguments) do
     apply(module, function, arguments)
-  rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
   catch
+    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end
 
-  defp apply_and_resque_errors(function, arguments) do
+  defp apply_and_catch_errors(function, arguments) do
     apply(function, arguments)
-    # TODO: This block can be replaced with catch :error, error
-  rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
   catch
+    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end
