@@ -2,6 +2,13 @@ defmodule Sage.CompensationErrorHandler do
   @moduledoc """
   This module provides behaviour for compensation error handling.
 
+  Few solutions you might want to try:
+
+  - Send notification to a Slack channel about need of manual resolution;
+  - Retry compensation;
+  - Spin off a new supervised process that would retry compensation and return an error in the Sage.
+  (Useful when you have connection issues that would be resolved at some point in future.)
+
   For more information see "Critical Error Handling" in Sage module doc.
   """
 

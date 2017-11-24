@@ -1,7 +1,9 @@
 defmodule Sage do
   @moduledoc ~S"""
   Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern
-  in pure Elixir. It is go to way when you dealing with distributed transactions, especially with
+  in pure Elixir.
+
+  It is go to way when you dealing with distributed transactions, especially with
   an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are
   successfully completed or compensating transactions are run to amend a partial execution.
 
@@ -21,14 +23,9 @@ defmodule Sage do
 
   But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
   When it's registered, compensations are wrapped in a `try..catch` block
-  and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
+  and then it's error handler responsibility to take care about further actions.
 
-  - Send notification to a Slack channel about need of manual resolution;
-  - Retry compensation;
-  - Spin off a new supervised process that would retry compensation and return an error in the Sage.
-  (Useful when you have connection issues that would be resolved at some point in future.)
-
-  Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
+  Logging for compensation errors is verbose to drive the attention to the problem from system maintainers.
 
   ## Examples
 
@@ -95,13 +92,13 @@ defmodule Sage do
   @type async_opts :: [{:timeout, integer() | :infinity}]
 
   @typedoc """
-  Transaction callback that receives effects created by completed preceding transactions
-  and options passed to `execute/2` function.
+  Transaction callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
+
+  Receives effects created by preceding executed transactions and options passed to `execute/2` function.
 
   Returns `{:ok, effect}` if transaction is successfully completed, `{:error, reason}` if there was an error
-  or `{:abort, reason}` if there was an unrecoverable error.
-
-  On receiving `{:abort, reason}` Sage will compensate all side effects created so far and ignore all retries.
+  or `{:abort, reason}` if there was an unrecoverable error. On receiving `{:abort, reason}` Sage will
+  compensate all side effects created so far and ignore all retries.
 
   `Sage.MalformedTransactionReturnError` is raised if callback returns malformed result.
 
@@ -113,7 +110,7 @@ defmodule Sage do
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
   @typedoc """
-  Compensation callback.
+  Compensation callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
 
   Receives:
 
@@ -121,7 +118,7 @@ defmodule Sage do
      * `{operation_operation_name, reason}` tuple with failed transaction name and it's failure reason;
      * options passed to `execute/2` function.
 
-  It should return:
+  Returns:
 
     * `:ok` if effect is compensated, Sage will continue to compensate other effects;
     * `:abort` if effect is compensated but should not be created again, \
@@ -145,7 +142,7 @@ defmodule Sage do
   received.
 
   Take into account that by doing retires you can increase execution time and block process that executes the Sage,
-  which can produce timeout eg. when you trying to respond to an HTTP request.
+  which can produce timeout, eg. when you trying to respond to an HTTP request.
 
   ## Compensation guidelines
 
@@ -217,11 +214,11 @@ defmodule Sage do
   def new, do: %Sage{}
 
   @doc """
-  Register error handler for compensation function.
+  Register error handler for compensations.
 
   Adapter must implement `Sage.CompensationErrorHandler` behaviour.
 
-  For more information see "Critical Error Handling" in the module doc/
+  For more information see "Critical Error Handling" in the module doc.
   """
   @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
   def with_compensation_error_handler(%Sage{} = sage, module) do
@@ -230,13 +227,14 @@ defmodule Sage do
 
   @doc """
   Registers tracer for a Sage execution.
-  Tracing module must implement `Sage.Tracer` behaviour.
 
   Registering duplicated tracing callback is not allowed and would raise an
   `Sage.DuplicateTracerError` exception.
 
-  All errors during execution of a tracing callbacks would be logged, but it won't affect Sage execution.
+  All errors during execution of a tracing callbacks would be logged,
+  but it won't affect Sage execution.
 
+  Tracing module must implement `Sage.Tracer` behaviour.
   For more information see `c:Sage.Tracer.handle_event/3`.
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
@@ -257,9 +255,10 @@ defmodule Sage do
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
 
-  If transaction does not produce effect to compensate, pass `:noop` instead of compensation callback.
+  If transaction does not produce effect to compensate,
+  pass `:noop` instead of compensation callback or use `run/3`.
   """
-  @spec run(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation()) :: t()
+  @spec run(sage :: t(), name :: name(), transaction :: transaction(), compensation :: compensation()) :: t()
   def run(sage, name, transaction, compensation) when is_atom(name),
     do: add_operation(sage, name, build_operation!(:run, transaction, compensation))
 
@@ -271,7 +270,7 @@ defmodule Sage do
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
-  @spec run(sage :: t(), name :: name(), apply :: transaction()) :: t()
+  @spec run(sage :: t(), name :: name(), transaction :: transaction()) :: t()
   def run(sage, name, transaction) when is_atom(name),
     do: add_operation(sage, name, build_operation!(:run, transaction, :noop))
 
@@ -292,7 +291,7 @@ defmodule Sage do
     * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
     `:infinity` will wait indefinitely (default: 5000);
   """
-  @spec run_async(sage :: t(), name :: name(), apply :: transaction(), rollback :: compensation(), opts :: async_opts()) ::
+  @spec run_async(sage :: t(), name :: name(), transaction :: transaction(), compensation :: compensation(), opts :: async_opts()) ::
           t()
   def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
     do: add_operation(sage, name, build_operation!(:run_async, transaction, compensation, opts))
@@ -326,17 +325,17 @@ defmodule Sage do
   @doc """
   Executes a Sage.
 
-  Raises `ArgumentError` if adapter is not loaded or does not implement `execute/2` callback.
-
   Optionally, you can pass global options in `opts`, that will be sent to
-  all transaction and compensation functions. It is especially useful when
+  all transaction, compensation functions and hooks. It is especially useful when
   you want to have keep sage definitions declarative and execute them with
-  different arguments (eg. by storing it in the module attribute).
+  different arguments (eg. by building it in the module attribute).
 
-  If there was an exception or exit in one of transaction functions,
+  If there was an exception, throw or exit in one of transaction functions,
   Sage will reraise it after compensating all effects.
 
   For handling exceptions in compensation functions see "Critical Error Handling" in module doc.
+
+  Raises `Sage.EmptyError` if Sage does not have any transactions.
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def execute(sage, opts \\ [])

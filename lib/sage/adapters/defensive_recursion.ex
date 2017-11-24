@@ -48,18 +48,18 @@ defmodule Sage.Adapters.DefensiveRecursion do
     |> execute_next_operation(ops, executed_ops, opts)
   end
 
-  defp maybe_await_for_tasks({operation, state}, []), do: {operation, state}
+  defp maybe_await_for_tasks({stage, state}, []), do: {stage, state}
 
-  # If next operation is async, we don't need to await for tasks
-  defp maybe_await_for_tasks({{_name, {:run_async, _transaction, _compensation, _opts}} = operation, state}, _tasks),
-    do: {operation, state}
+  # If next stage has async transaction, we don't need to await for tasks
+  defp maybe_await_for_tasks({{_name, {:run_async, _transaction, _compensation, _opts}} = stage, state}, _tasks),
+    do: {stage, state}
 
-  defp maybe_await_for_tasks({operation, state}, tasks) do
+  defp maybe_await_for_tasks({stage, state}, tasks) do
     state = put_elem(state, 4, [])
 
     tasks
     |> Enum.map(&await_for_task/1)
-    |> Enum.reduce({operation, state}, &handle_task_result/2)
+    |> Enum.reduce({stage, state}, &handle_task_result/2)
   end
 
   defp await_for_task({name, {task, yield_opts}}) do
@@ -96,12 +96,12 @@ defmodule Sage.Adapters.DefensiveRecursion do
     end
   end
 
-  defp handle_task_result({name, result}, {operation_or_command, state}) do
+  defp handle_task_result({name, result}, {stage, state}) do
     state = put_elem(state, 6, maybe_notify_tracers(elem(state, 6), :finish_transaction, name))
 
     case handle_transaction_result({name, :async, result, state}) do
       {:next_transaction, {^name, :async}, state} ->
-        {operation_or_command, state}
+        {stage, state}
 
       {:start_compensations, {^name, :async}, state} ->
         {:start_compensations, state}
@@ -412,7 +412,7 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   def compensation_error_message({:raise, {exception, stacktrace}}) do
     """
-    Exception was raised:
+    Because exception was raised:
 
       #{Exception.format(:error, exception, stacktrace)}
 
@@ -479,18 +479,20 @@ defmodule Sage.Adapters.DefensiveRecursion do
 
   defp maybe_log_errors({from, {:raise, {exception, stacktrace}}}) do
     Logger.error("""
-    [Sage] final hook exception from #{callback_to_string(from)} is ignored:
+    [Sage] Exception during #{callback_to_string(from)} final hook execution is ignored:
 
       #{Exception.format(:error, exception, stacktrace)}
     """)
   end
 
   defp maybe_log_errors({from, {:throw, reason}}) do
-    Logger.error("[Sage] final hook error from #{callback_to_string(from)} is ignored. Error: #{inspect(reason)}")
+    Logger.error("[Sage] Throw during #{callback_to_string(from)} final hook execution is ignored. " <>
+                 "Error: #{inspect(reason)}")
   end
 
   defp maybe_log_errors({from, {:exit, reason}}) do
-    Logger.error("[Sage] final hook exit from #{callback_to_string(from)} is ignored. Exit reason: #{inspect(reason)}")
+    Logger.error("[Sage] Exit during #{callback_to_string(from)} final hook execution is ignored. " <>
+                 "Exit reason: #{inspect(reason)}")
   end
 
   defp maybe_log_errors({_from, _other}) do

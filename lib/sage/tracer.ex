@@ -8,10 +8,10 @@ defmodule Sage.Tracer do
   ## Hooks State
 
   All hooks share their state, which by default contains options passed to `execute/2` function.
-  This is useful if you want to persist timer of execution start and then persist it somewhere.
+  This is useful if you want to persist timer of stage execution start and then persist it somewhere.
 
-  Altering this state won't affect Sage execution in any way, changes would be visible only to
-  other tracing calls.
+  Altering this state won't affect transactions or compensations in any way,
+  changes would be visible only to other tracing calls.
   """
 
   @type action :: :start_transaction | :finish_transaction | :start_compensation | :finish_compensation
