@@ -418,7 +418,7 @@ defmodule Sage.Executor do
     end
   end
 
-  def compensation_error_message({:raise, {exception, stacktrace}}) do
+  defp compensation_error_message({:raise, {exception, stacktrace}}) do
     """
     Because exception was raised:
 
@@ -427,20 +427,19 @@ defmodule Sage.Executor do
     """
   end
 
-  def compensation_error_message({:exit, reason}) do
+  defp compensation_error_message({:exit, reason}) do
     "Because of exit with reason: #{inspect(reason)}."
   end
 
-  def compensation_error_message({:throw, error}) do
+  defp compensation_error_message({:throw, error}) do
     "Because of thrown error: #{inspect(error)}."
   end
 
-  # maybe do it similary to Ecto.LogEvent?
-  def maybe_notify_tracers({[], _tracing_state} = tracers, _action, _name) do
+  defp maybe_notify_tracers({[], _tracing_state} = tracers, _action, _name) do
     tracers
   end
 
-  def maybe_notify_tracers({tracers, tracing_state}, action, name) do
+  defp maybe_notify_tracers({tracers, tracing_state}, action, name) do
     tracing_state =
       Enum.reduce(tracers, tracing_state, fn tracer, tracing_state ->
         apply_and_catch_errors(tracer, :handle_event, [name, action, tracing_state])
