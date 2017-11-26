@@ -54,15 +54,15 @@ defmodule Sage.RetryPolicyTest do
     end
 
     test "applies exponential backoff with jitter" do
-      assert get_backoff(1, 10, 5_000, true) in 1..20
-      assert get_backoff(2, 10, 5_000, true) in 1..400
-      assert get_backoff(3, 10, 5_000, true) in 1..5000
-      assert get_backoff(4, 10, 5_000, true) in 1..5000
+      assert get_backoff(1, 10, 5_000, true) in 0..20
+      assert get_backoff(2, 10, 5_000, true) in 0..400
+      assert get_backoff(3, 10, 5_000, true) in 0..5000
+      assert get_backoff(4, 10, 5_000, true) in 0..5000
 
-      assert get_backoff(1, 7, 5_000, true) in 1..14
-      assert get_backoff(2, 7, 5_000, true) in 1..196
-      assert get_backoff(3, 7, 5_000, true) in 1..2744
-      assert get_backoff(4, 7, 5_000, true) in 1..5000
+      assert get_backoff(1, 7, 5_000, true) in 0..14
+      assert get_backoff(2, 7, 5_000, true) in 0..196
+      assert get_backoff(3, 7, 5_000, true) in 0..2744
+      assert get_backoff(4, 7, 5_000, true) in 0..5000
     end
   end
 

@@ -31,17 +31,18 @@ defmodule Sage.EffectsCase do
     assert Enum.reverse(effects) == expected_effects
   end
 
-  def assert_finally_fails(sage, asserted_opts \\ nil) do
-    Sage.finally(sage, fn status, opts ->
-      if asserted_opts, do: assert(opts == asserted_opts)
-      assert status == :error
-    end)
-  end
+  def final_hook_with_assertion(asserted_status, asserted_opts \\ nil) do
+    test_pid = self()
+    ref = make_ref()
 
-  def assert_finally_succeeds(sage, asserted_opts \\ nil) do
-    Sage.finally(sage, fn status, opts ->
+    hook = &send(test_pid, {:finally, ref, &1, &2})
+
+    assert_fun = fn ->
+      assert_receive {:finally, ^ref, status, opts}, 500
+      assert status == asserted_status
       if asserted_opts, do: assert(opts == asserted_opts)
-      assert status == :ok
-    end)
+    end
+
+    {hook, assert_fun}
   end
 end

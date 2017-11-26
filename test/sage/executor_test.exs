@@ -3,32 +3,40 @@ defmodule Sage.ExecutorTest do
 
   describe "transactions" do
     test "are executed" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, {__MODULE__, :mfa_transaction, [transaction(:t3)]}, compensation())
-        |> assert_finally_succeeds(a: :b)
+        |> finally(hook)
         |> execute(a: :b)
 
+      hook_assertion.()
       assert_effects([:t1, :t2, :t3])
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
     test "are executed with Executor" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok)
+
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, {__MODULE__, :mfa_transaction, [transaction(:t3)]}, compensation())
-        |> assert_finally_succeeds(a: :b)
+        |> finally(hook)
         |> Sage.Executor.execute()
 
+      hook_assertion.()
       assert_effects([:t1, :t2, :t3])
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
     test "are awaiting on next synchronous operation when executes asynchronous transactions" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
       result =
         new()
         |> run_async(:step1, transaction(:t1), not_strict_compensation())
@@ -37,9 +45,10 @@ defmodule Sage.ExecutorTest do
              assert effects_so_far == %{step1: :t1, step2: :t2}
              transaction(:t3).(effects_so_far, opts)
            end)
-        |> assert_finally_succeeds(a: :b)
+        |> finally(hook)
         |> execute(a: :b)
 
+      hook_assertion.()
       assert_effect(:t1)
       assert_effect(:t2)
       assert_effect(:t3)
@@ -48,6 +57,8 @@ defmodule Sage.ExecutorTest do
     end
 
     test "are returning last operation result when executes asynchronous transactions on last steps" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
       result =
         new()
         |> run_async(:step1, transaction(:t1), not_strict_compensation())
@@ -55,7 +66,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, transaction(:t3), not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run_async(:step5, transaction(:t5), not_strict_compensation())
-        |> assert_finally_succeeds(a: :b)
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_effect(:t1)
@@ -64,49 +75,61 @@ defmodule Sage.ExecutorTest do
       assert_effect(:t4)
       assert_effect(:t5)
 
+      hook_assertion.()
+
       assert result == {:ok, :t5, %{step1: :t1, step2: :t2, step3: :t3, step4: :t4, step5: :t5}}
     end
   end
 
   test "effects are not compensated for operations with :noop compensation" do
+    {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
     result =
       new()
       |> run(:step1, transaction_with_error(:t1))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> execute(a: :b)
 
     assert_effects([:t1])
     assert result == {:error, :t1}
+    hook_assertion.()
   end
 
   describe "effects are compensated" do
     test "when transaction fails" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, transaction_with_error(:t3), compensation())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_no_effects()
       assert result == {:error, :t3}
+      hook_assertion.()
     end
 
     test "when compensation is mfa tuple" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, transaction_with_error(:t3), {__MODULE__, :mfa_compensation, [compensation(:t3)]})
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_no_effects()
       assert result == {:error, :t3}
+      hook_assertion.()
     end
 
     test "for executed async transactions when transaction fails" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
 
       cmp = fn effect_to_compensate, name_and_reason, opts ->
@@ -120,7 +143,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step1, transaction(:t1), cmp)
         |> run_async(:step2, transaction(:t2), cmp)
         |> run(:step3, transaction_with_error(:t3), cmp)
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_receive {:compensate, :t2}
@@ -128,9 +151,11 @@ defmodule Sage.ExecutorTest do
 
       assert_no_effects()
       assert result == {:error, :t3}
+      hook_assertion.()
     end
 
     test "for all started async transaction when one of them failed" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
 
       cmp = fn effect_to_compensate, name_and_reason, opts ->
@@ -143,7 +168,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step1, transaction_with_error(:t1), cmp)
         |> run_async(:step2, transaction(:t2), cmp)
         |> run_async(:step3, transaction(:t3), cmp)
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       # Since all async tasks are run in parallel
@@ -155,22 +180,30 @@ defmodule Sage.ExecutorTest do
 
       assert_no_effects()
       assert result == {:error, :t1}
+
+      hook_assertion.()
     end
 
     test "with preserved error name and reason for synchronous transactions" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction_with_error(:t2), compensation())
         |> run(:step3, transaction_with_error(:t3), compensation())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_no_effects()
       assert result == {:error, :t2}
+
+      hook_assertion.()
     end
 
     test "with preserved error name and reason for asynchronous transactions" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
       cmp = fn effect_to_compensate, name_and_reason, opts ->
         assert name_and_reason == {:step2, :t2}
         not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
@@ -181,14 +214,18 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step1, transaction(:t1), cmp)
         |> run_async(:step2, transaction_with_error(:t2), cmp)
         |> run_async(:step3, transaction(:t3), cmp)
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_no_effects()
       assert result == {:error, :t2}
+
+      hook_assertion.()
     end
 
     test "when transaction raised an exception" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
+
       test_pid = self()
       tx = transaction(:t3)
 
@@ -204,7 +241,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run(:step5, transaction_with_exception(:t5), compensation(:t5))
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute()
       end
 
@@ -213,9 +250,13 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+
+      hook_assertion.()
     end
 
     test "when transaction throws an error" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
+
       test_pid = self()
       tx = transaction(:t3)
 
@@ -231,7 +272,7 @@ defmodule Sage.ExecutorTest do
                |> run_async(:step3, tx, not_strict_compensation())
                |> run_async(:step4, transaction(:t4), not_strict_compensation())
                |> run(:step5, transaction_with_throw(:t5), compensation(:t5))
-               |> assert_finally_fails()
+               |> finally(hook)
                |> execute()
              ) == "error while creating t5"
 
@@ -240,9 +281,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when transaction exits" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -258,7 +301,7 @@ defmodule Sage.ExecutorTest do
                |> run_async(:step3, tx, not_strict_compensation())
                |> run_async(:step4, transaction(:t4), not_strict_compensation())
                |> run(:step5, transaction_with_exit(:t5), compensation(:t5))
-               |> assert_finally_fails()
+               |> finally(hook)
                |> execute()
              ) == "error while creating t5"
 
@@ -267,9 +310,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when transaction has malformed return" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -292,7 +337,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run(:step5, transaction_with_malformed_return(:t5), compensation(:t5))
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute()
       end
 
@@ -301,9 +346,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when async transaction timed out" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -324,7 +371,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run_async(:step5, transaction_with_sleep(:t5, 20), not_strict_compensation(:t5), timeout: 10)
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute()
       end
 
@@ -333,9 +380,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when async transaction raised an exception" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -351,7 +400,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run_async(:step5, transaction_with_exception(:t5), not_strict_compensation(:t5))
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute()
       end
 
@@ -360,9 +409,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when async transaction throws an error" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -378,7 +429,7 @@ defmodule Sage.ExecutorTest do
                |> run_async(:step3, tx, not_strict_compensation())
                |> run_async(:step4, transaction(:t4), not_strict_compensation())
                |> run_async(:step5, transaction_with_throw(:t5), not_strict_compensation(:t5))
-               |> assert_finally_fails()
+               |> finally(hook)
                |> execute()
              ) == "error while creating t5"
 
@@ -387,9 +438,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when async transaction exits" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -405,7 +458,7 @@ defmodule Sage.ExecutorTest do
                |> run_async(:step3, tx, not_strict_compensation())
                |> run_async(:step4, transaction(:t4), not_strict_compensation())
                |> run_async(:step5, transaction_with_exit(:t5), not_strict_compensation(:t5))
-               |> assert_finally_fails()
+               |> finally(hook)
                |> execute()
              ) == "error while creating t5"
 
@@ -414,9 +467,11 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
 
     test "when async transaction has malformed return" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -439,7 +494,7 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step3, tx, not_strict_compensation())
         |> run_async(:step4, transaction(:t4), not_strict_compensation())
         |> run_async(:step5, transaction_with_malformed_return(:t5), not_strict_compensation(:t5))
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute()
       end
 
@@ -448,10 +503,12 @@ defmodule Sage.ExecutorTest do
       assert_receive {:execute, :t3}
 
       assert_no_effects()
+      hook_assertion.()
     end
   end
 
   test "errors in compensations are raised by default" do
+    {hook, _hook_assertion} = final_hook_with_assertion(:error)
     test_pid = self()
     tx = transaction(:t3)
 
@@ -467,7 +524,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_exception(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> execute()
     end
 
@@ -479,9 +536,12 @@ defmodule Sage.ExecutorTest do
     assert_effect(:t2)
     assert_effect(:t3)
     assert_effect(:t4)
+
+    refute_received {:finally, _, _, _}
   end
 
   test "compensations malformed return is reported by default" do
+    {hook, _hook_assertion} = final_hook_with_assertion(:error, a: :b)
     test_pid = self()
     tx = transaction(:t3)
 
@@ -504,7 +564,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_malformed_return(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> execute()
     end
 
@@ -516,10 +576,13 @@ defmodule Sage.ExecutorTest do
     assert_effect(:t2)
     assert_effect(:t3)
     assert_effect(:t4)
+
+    refute_received {:finally, _, _, _}
   end
 
   describe "compensation error handler" do
     test "can resume compensation of effects on exception" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -534,7 +597,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_exception(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
       |> execute()
 
@@ -543,9 +606,12 @@ defmodule Sage.ExecutorTest do
       refute_receive {:execute, :t3}
 
       assert_effects([:t2])
+
+      hook_assertion.()
     end
 
     test "can resume compensation of effects on exit" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -560,7 +626,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_exit(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
       |> execute()
 
@@ -569,9 +635,12 @@ defmodule Sage.ExecutorTest do
       refute_receive {:execute, :t3}
 
       assert_no_effects()
+
+      hook_assertion.()
     end
 
     test "can resume compensation of effects on throw" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -586,7 +655,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_throw(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
       |> execute()
 
@@ -595,9 +664,12 @@ defmodule Sage.ExecutorTest do
       refute_receive {:execute, :t3}
 
       assert_no_effects()
+
+      hook_assertion.()
     end
 
     test "can resume compensation of effects on malformed return" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
 
@@ -612,7 +684,7 @@ defmodule Sage.ExecutorTest do
       |> run_async(:step3, tx, not_strict_compensation())
       |> run_async(:step4, transaction(:t4), not_strict_compensation())
       |> run(:step5, transaction_with_error(:t5), compensation_with_malformed_return(:t5))
-      |> assert_finally_fails()
+      |> finally(hook)
       |> with_compensation_error_handler(Sage.TestCompensationErrorHandler)
       |> execute()
 
@@ -621,6 +693,8 @@ defmodule Sage.ExecutorTest do
       refute_receive {:execute, :t3}
 
       assert_no_effects()
+
+      hook_assertion.()
     end
   end
 
@@ -811,6 +885,8 @@ defmodule Sage.ExecutorTest do
 
   describe "retries" do
     test "are executing transactions again" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
       test_pid = self()
       tx = transaction(:t2)
 
@@ -824,18 +900,21 @@ defmodule Sage.ExecutorTest do
         |> run(:step1, transaction(:t1), compensation_with_retry(3))
         |> run(:step2, tx, compensation())
         |> run(:step3, transaction_with_n_errors(2, :t3), compensation())
-        |> assert_finally_succeeds(a: :b)
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_receive {:execute, :t2}
       assert_receive {:execute, :t2}
       assert_receive {:execute, :t2}
 
+      hook_assertion.()
+
       assert_effects([:t1, :t2, :t3])
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
     test "are ignored when retry limit exceeded" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
       tx = transaction(:t2)
 
@@ -849,7 +928,7 @@ defmodule Sage.ExecutorTest do
         |> run(:step1, transaction(:t1), compensation_with_retry(3))
         |> run(:step2, tx, compensation())
         |> run(:step3, transaction_with_n_errors(4, :t3), compensation())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_receive {:execute, :t2}
@@ -859,9 +938,12 @@ defmodule Sage.ExecutorTest do
 
       assert_no_effects()
       assert result == {:error, :t3}
+
+      hook_assertion.()
     end
 
     test "are ignored when compensation aborted the sage" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
       tx = transaction(:t2)
 
@@ -875,7 +957,7 @@ defmodule Sage.ExecutorTest do
         |> run(:step1, transaction(:t1), compensation_with_retry(3))
         |> run(:step2, tx, compensation())
         |> run(:step3, transaction_with_n_errors(1, :t3), compensation_with_abort())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_receive {:execute, :t2}
@@ -883,9 +965,12 @@ defmodule Sage.ExecutorTest do
 
       assert_no_effects()
       assert result == {:error, :t3}
+
+      hook_assertion.()
     end
 
     test "are ignored when transaction aborted the sage" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
       tx = transaction(:t2)
 
@@ -899,7 +984,7 @@ defmodule Sage.ExecutorTest do
         |> run(:step1, transaction(:t1), compensation_with_retry(3))
         |> run(:step2, tx, compensation())
         |> run(:step3, transaction_with_abort(:t3), compensation())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_receive {:execute, :t2}
@@ -907,22 +992,28 @@ defmodule Sage.ExecutorTest do
 
       assert_no_effects()
       assert result == {:error, :t3}
+      hook_assertion.()
     end
   end
 
   describe "circuit breaker" do
     test "response is used as transaction effect" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
       result =
         new()
         |> run(:step1, transaction_with_error(:t1), compensation_with_circuit_breaker(:t1_defaults))
-        |> assert_finally_succeeds()
+        |> finally(hook)
         |> execute(a: :b)
 
       assert_no_effects()
       assert result == {:ok, :t1_defaults, %{step1: :t1_defaults}}
+      hook_assertion.()
     end
 
     test "raises exception when returned from compensation which is not responsible for failed transaction" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
       message = """
       Compensation step1 tried to apply circuit
       breaker on a failure which occurred on transaction
@@ -939,11 +1030,12 @@ defmodule Sage.ExecutorTest do
         new()
         |> run(:step1, transaction(:t1), compensation_with_circuit_breaker(:t1_defaults))
         |> run(:step2, transaction_with_error(:t2), compensation())
-        |> assert_finally_fails()
+        |> finally(hook)
         |> execute(a: :b)
       end
 
       assert_no_effects()
+      hook_assertion.()
     end
   end
 
