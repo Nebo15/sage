@@ -2,7 +2,6 @@ language: elixir
 cache:
   directories:
   - deps
-  - _build/dev
   - _build/test
 elixir:
   - 1.5.0
@@ -21,10 +20,9 @@ script:
   # Check code style
   - "mix dogma"
   # Check type safety
-  - "MIX_ENV=dev mix dialyzer --unmatched_returns --error_handling --race_conditions --underspecs"
+  - "mix dialyzer --unmatched_returns --error_handling --race_conditions --underspecs"
 after_script:
   # Submit docs coverage to Inch CI
-  - mix deps.get --only docs
-  - MIX_ENV=docs mix inch.report
+  - "mix inch.report"
   # Submit code coverage report to Coveralls
   - "mix coveralls.travis"
