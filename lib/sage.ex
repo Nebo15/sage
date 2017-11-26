@@ -240,8 +240,10 @@ defmodule Sage do
 
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
+  @typep stage :: {name :: stage_name(), operation :: operation()}
+
   @type t :: %__MODULE__{
-          stages: [{stage_name(), operation()}],
+          stages: [stage()],
           stage_names: MapSet.t(),
           final_hooks: MapSet.t(final_hook()),
           on_compensation_error: :raise | module(),
