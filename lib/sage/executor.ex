@@ -396,7 +396,7 @@ defmodule Sage.Executor do
                acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
            end)
 
-      Logger.warn("""
+      _ = Logger.warn("""
       [Sage] compensation #{inspect(name)} failed to compensate effect:
 
         #{inspect(compensated_effect)}
@@ -452,18 +452,19 @@ defmodule Sage.Executor do
 
   defp maybe_notify_final_hooks(result, filanlize_callbacks, opts) do
     status = if elem(result, 0) == :ok, do: :ok, else: :error
-    # credo:disable-for-lines:11
-    filanlize_callbacks
-    |> Enum.map(fn
-         {module, function, args} ->
-           args = [status, opts | args]
-           {{module, function, args}, apply_and_catch_errors(module, function, args)}
 
-         callback ->
-           args = [status, opts]
-           {{callback, args}, apply_and_catch_errors(callback, args)}
-       end)
-    |> Enum.map(&maybe_log_errors/1)
+    :ok =
+      filanlize_callbacks
+      |> Enum.map(fn
+           {module, function, args} ->
+             args = [status, opts | args]
+             {{module, function, args}, apply_and_catch_errors(module, function, args)}
+
+           callback ->
+             args = [status, opts]
+             {{callback, args}, apply_and_catch_errors(callback, args)}
+         end)
+      |> Enum.each(&maybe_log_errors/1)
 
     result
   end
