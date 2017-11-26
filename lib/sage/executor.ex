@@ -8,6 +8,10 @@ defmodule Sage.Executor do
   # @compile {:inline, encode_integer: 1, encode_float: 1}
 
   @spec execute(sage :: Sage.t(), opts :: any()) :: {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
+  def execute(sage, opts \\ [])
+
+  def execute(%Sage{operations: []}, _opts), do: raise(Sage.EmptyError)
+
   def execute(%Sage{} = sage, opts) do
     %{
       operations: operations,

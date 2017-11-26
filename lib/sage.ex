@@ -341,9 +341,7 @@ defmodule Sage do
   Raises `Sage.EmptyError` if Sage does not have any transactions.
   """
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
-  def execute(sage, opts \\ [])
-  def execute(%Sage{operations: []}, _opts), do: raise(Sage.EmptyError)
-  def execute(%Sage{} = sage, opts), do: Sage.Executor.execute(sage, opts)
+  defdelegate execute(sage, opts \\ []), to: Sage.Executor
 
   @doc """
   Wraps `execute/2` into anonymous function to be run with a `Ecto.Repo.transaction/1`.
