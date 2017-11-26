@@ -302,12 +302,12 @@ defmodule Sage.Executor do
   end
 
   defp handle_compensation_result({name, operation, {:retry, _retry_opts}, _compensated_effect, state})
-       when elem(state, 3) == true do
+       when elem(state, 3) do
     {:next_compensation, {name, operation}, state}
   end
 
   defp handle_compensation_result({name, operation, {:retry, retry_opts}, _compensated_effect, state})
-       when elem(state, 3) == false do
+       when not elem(state, 3) do
     {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state
 
     if Keyword.fetch!(retry_opts, :retry_limit) > count do
@@ -319,7 +319,7 @@ defmodule Sage.Executor do
   end
 
   defp handle_compensation_result({name, operation, {:continue, effect}, _compensated_effect, state})
-       when elem(state, 3) == false and name == elem(elem(state, 0), 0) do
+       when not elem(state, 3) and name == elem(elem(state, 0), 0) do
     {{name, _return_reason}, effects_so_far, retries, false, [], on_compensation_error, tracers} = state
     state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
     {:next_transaction, {name, operation}, state}

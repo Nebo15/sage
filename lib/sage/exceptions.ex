@@ -112,7 +112,7 @@ defmodule Sage.DuplicateFinalHookError do
   end
 
   defp format_callback({m, f, a}), do: "#{inspect(m)}.#{to_string(f)}/#{to_string(length(a) + 2)}"
-  defp format_callback(cb), do: "#{inspect(cb)}"
+  defp format_callback(cb), do: inspect(cb)
 end
 
 defmodule Sage.MalformedTransactionReturnError do
