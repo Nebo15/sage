@@ -30,8 +30,8 @@ and if we have a failure on 3-d step Sage will cleanup side effects by running c
 Along with that simple idea, you will get much more out of the box with Sage:
 
 - Transaction retries;
-<!-- - TTL-based caching; -->
 - Asynchronous transactions with timeout;
+- Retries with exponential backoff and jitter;
 - Ease to write circuit breakers;
 - Code that is clean and easy to test;
 - Low cost of integration in existing code base and low performance overhead;
@@ -113,8 +113,8 @@ import Sage
 
 new()
 |> run(:user, &create_user/2)
-|> run_cached(:plans, &fetch_subscription_plans/3, ttl: 30_000) # Cache response for 30 seconds
-|> retry_on_error(retry_limit: 3) # If one of next transactions fails, retry them for 3 times
+|> run(:plans, &fetch_subscription_plans/2)
+|> Sage.Experimental.checkpoint(retry_limit: 3) # If one of next transactions fails, retry them for 3 times
 |> run(:subscription, &create_subscription/2, &delete_subscription/3)
 |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
 |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
@@ -128,7 +128,7 @@ Along with more readable code, you getting:
 
 - Guarantees that transaction steps are completed or all failed steps are compensated;
 - Much simpler and easier to test code for transaction and compensation function implementations;
-- Retries, caching, circuit breaking and asynchronous requests;
+- Retries, circuit breaking and asynchronous requests;
 - Declarative way to define your transactions and run them.
 
 ## Critical Error Handling
