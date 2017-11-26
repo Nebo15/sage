@@ -16,10 +16,10 @@ script:
   - "mix deps.get"
   # Run all tests except pending ones
   - "mix test --exclude pending --trace"
-  # # Run static code analysis
-  # - "mix credo"
-  # # Check code style
-  # - "mix dogma"
+  # Run static code analysis
+  - "mix credo"
+  # Check code style
+  - "mix dogma"
   # Check type safety
   - "MIX_ENV=dev mix dialyzer --unmatched_returns --error_handling --race_conditions --underspecs"
 after_script:
