@@ -24,5 +24,5 @@ defmodule Sage.Tracer do
 
   Returns updated state.
   """
-  @callback handle_event(name :: Sage.name(), action :: action(), state :: any()) :: any()
+  @callback handle_event(name :: Sage.stage_name(), action :: action(), state :: any()) :: any()
 end

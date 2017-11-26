@@ -49,7 +49,7 @@ defmodule Sage.AsyncTransactionTimeoutError do
   end
 end
 
-defmodule Sage.DuplicateOperationError do
+defmodule Sage.DuplicateStageError do
   @moduledoc """
   Raised at runtime when operation with duplicated name is added to Sage.
   """

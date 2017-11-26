@@ -79,7 +79,7 @@ defmodule Sage do
   @typedoc """
   Name of Sage execution stage.
   """
-  @type name :: atom()
+  @type stage_name :: atom()
 
   @typedoc """
   Effects created on Sage execution.
@@ -176,7 +176,7 @@ defmodule Sage do
   Receives:
 
      * effect created by transaction it's responsible for or `nil` in case effect can not be captured;
-     * `{operation_operation_name, reason}` tuple with failed transaction name and it's failure reason;
+     * `{stage_name, reason}` tuple with failed transaction name and it's failure reason;
      * options passed to `execute/2` function.
 
   Returns:
@@ -222,7 +222,7 @@ defmodule Sage do
   """
   @type compensation ::
           (effect_to_compensate() :: any(),
-           {operation_operation_name :: name(), failed_value :: any()},
+           {stage_name :: stage_name(), failed_value :: any()},
            execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
@@ -241,15 +241,15 @@ defmodule Sage do
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
   @type t :: %__MODULE__{
-          operations: [{name(), operation()}],
-          operation_names: MapSet.t(),
+          stages: [{stage_name(), operation()}],
+          stage_names: MapSet.t(),
           final_hooks: MapSet.t(final_hook()),
           on_compensation_error: :raise | module(),
           tracers: MapSet.t(module())
         }
 
-  defstruct operations: [],
-            operation_names: MapSet.new(),
+  defstruct stages: [],
+            stage_names: MapSet.new(),
             final_hooks: MapSet.new(),
             on_compensation_error: :raise,
             tracers: MapSet.new()
@@ -343,9 +343,9 @@ defmodule Sage do
   If transaction does not produce effect to compensate,
   pass `:noop` instead of compensation callback or use `run/3`.
   """
-  @spec run(sage :: t(), name :: name(), transaction :: transaction(), compensation :: compensation()) :: t()
+  @spec run(sage :: t(), name :: stage_name(), transaction :: transaction(), compensation :: compensation()) :: t()
   def run(sage, name, transaction, compensation) when is_atom(name),
-    do: add_operation(sage, name, build_operation!(:run, transaction, compensation))
+    do: add_stage(sage, name, build_operation!(:run, transaction, compensation))
 
   @doc """
   Appends sage with an transaction that does not have side effect.
@@ -355,9 +355,9 @@ defmodule Sage do
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
-  @spec run(sage :: t(), name :: name(), transaction :: transaction()) :: t()
+  @spec run(sage :: t(), name :: stage_name(), transaction :: transaction()) :: t()
   def run(sage, name, transaction) when is_atom(name),
-    do: add_operation(sage, name, build_operation!(:run, transaction, :noop))
+    do: add_stage(sage, name, build_operation!(:run, transaction, :noop))
 
   @doc """
   Appends sage with an asynchronous transaction and function to compensate it's effect.
@@ -378,13 +378,13 @@ defmodule Sage do
   """
   @spec run_async(
           sage :: t(),
-          name :: name(),
+          name :: stage_name(),
           transaction :: transaction(),
           compensation :: compensation(),
           opts :: async_opts()
         ) :: t()
   def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
-    do: add_operation(sage, name, build_operation!(:run_async, transaction, compensation, opts))
+    do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
   Executes a Sage.
@@ -410,16 +410,16 @@ defmodule Sage do
   @spec to_function(sage :: t(), opts :: any()) :: function()
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
 
-  defp add_operation(sage, name, operation) do
-    %{operations: operations, operation_names: names} = sage
+  defp add_stage(sage, name, operation) do
+    %{stages: stages, stage_names: names} = sage
 
     if MapSet.member?(names, name) do
-      raise Sage.DuplicateOperationError, sage: sage, name: name
+      raise Sage.DuplicateStageError, sage: sage, name: name
     else
       %{
         sage
-        | operations: [{name, operation} | operations],
-          operation_names: MapSet.put(names, name)
+        | stages: [{name, operation} | stages],
+          stage_names: MapSet.put(names, name)
       }
     end
   end

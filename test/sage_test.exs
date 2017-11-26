@@ -90,7 +90,7 @@ defmodule SageTest do
       assert execute(sage, foo: "bar") == {:ok, :t1, %{step1: :t1}}
     end
 
-    test "raises when there is no operations to execute" do
+    test "raises when there are no stages to execute" do
       sage = new()
 
       assert_raise Sage.EmptyError, "trying to execute empty Sage is not allowed", fn ->
@@ -102,15 +102,15 @@ defmodule SageTest do
   describe "run/3" do
     test "adds operation via anonymous function to a sage" do
       tx = transaction(:t1)
-      %Sage{operations: operations, operation_names: names} = run(new(), :step1, tx)
-      assert {:step1, {:run, tx, :noop, []}} in operations
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx)
+      assert {:step1, {:run, tx, :noop, []}} in stages
       assert MapSet.member?(names, :step1)
     end
 
     test "adds operation via mfa tuple to a sage" do
       tx = {__MODULE__, :dummy_transaction_for_mfa, []}
-      %Sage{operations: operations, operation_names: names} = run(new(), :step1, tx)
-      assert {:step1, {:run, tx, :noop, []}} in operations
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx)
+      assert {:step1, {:run, tx, :noop, []}} in stages
       assert MapSet.member?(names, :step1)
     end
   end
@@ -119,30 +119,30 @@ defmodule SageTest do
     test "adds compensation via anonymous function to a sage" do
       tx = transaction(:t1)
       cmp = compensation()
-      %Sage{operations: operations, operation_names: names} = run(new(), :step1, tx, cmp)
-      assert {:step1, {:run, tx, cmp, []}} in operations
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx, cmp)
+      assert {:step1, {:run, tx, cmp, []}} in stages
       assert MapSet.member?(names, :step1)
     end
 
     test "adds compensation via mfa tuple to a sage" do
       tx = transaction(:t1)
       cmp = {__MODULE__, :dummy_compensation_for_mfa, []}
-      %Sage{operations: operations, operation_names: names} = run(new(), :step1, tx, cmp)
-      assert {:step1, {:run, tx, cmp, []}} in operations
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx, cmp)
+      assert {:step1, {:run, tx, cmp, []}} in stages
       assert MapSet.member?(names, :step1)
     end
 
     test "allows to user :noop for compensation" do
       tx = transaction(:t1)
-      %Sage{operations: operations, operation_names: names} = run(new(), :step1, tx, :noop)
-      assert {:step1, {:run, tx, :noop, []}} in operations
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx, :noop)
+      assert {:step1, {:run, tx, :noop, []}} in stages
       assert MapSet.member?(names, :step1)
     end
 
     test "raises when on duplicate names" do
       message = ~r":step1 is already a member of the Sage:"
 
-      assert_raise Sage.DuplicateOperationError, message, fn ->
+      assert_raise Sage.DuplicateStageError, message, fn ->
         new()
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step1, transaction(:t2), compensation())
@@ -154,16 +154,16 @@ defmodule SageTest do
     test "adds compensation via anonymous function to a sage" do
       tx = transaction(:t1)
       cmp = compensation()
-      %Sage{operations: operations, operation_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
-      assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in operations
+      %Sage{stages: stages, stage_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
+      assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in stages
       assert MapSet.member?(names, :step1)
     end
 
     test "adds compensation via mfa tuple to a sage" do
       tx = transaction(:t1)
       cmp = {__MODULE__, :dummy_compensation_for_mfa, []}
-      %Sage{operations: operations, operation_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
-      assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in operations
+      %Sage{stages: stages, stage_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
+      assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in stages
       assert MapSet.member?(names, :step1)
     end
   end

@@ -14,9 +14,9 @@ defimpl Inspect, for: Sage do
   end
 
   defp to_list(sage) do
-    operations = sage.operations |> Enum.reverse() |> Enum.map(&format_stage/1)
+    stages = sage.stages |> Enum.reverse() |> Enum.map(&format_stage/1)
     final_hooks = Enum.map(sage.final_hooks, &concat("finally: ", format_final_hook(&1)))
-    Enum.concat([operations, final_hooks])
+    Enum.concat([stages, final_hooks])
   end
 
   defp format_stage({name, operation}) do
