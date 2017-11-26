@@ -215,7 +215,7 @@ by adding `sage` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:sage, "~> 0.1.0"}
+    {:sage, "~> 0.3.0"}
   ]
 end
 ```
