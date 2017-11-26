@@ -29,50 +29,50 @@ defmodule Sage do
 
   ## Examples
 
-    def my_sage do
-      import Sage
+      def my_sage do
+        import Sage
 
-      new()
-      |> run(:user, &create_user/2, &delete_user/3)
-      |> run(:plans, &fetch_subscription_plans/3)
-      |> run(:subscription, &create_subscription/2, delete_subscription/3)
-      |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
-      |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
-      |> run(:update_user, &set_plan_for_a_user/2, &rollback_plan_for_a_user/3)
-      |> finally(&acknowledge_job/2)
-    end
+        new()
+        |> run(:user, &create_user/2, &delete_user/3)
+        |> run(:plans, &fetch_subscription_plans/3)
+        |> run(:subscription, &create_subscription/2, delete_subscription/3)
+        |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
+        |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
+        |> run(:update_user, &set_plan_for_a_user/2, &rollback_plan_for_a_user/3)
+        |> finally(&acknowledge_job/2)
+      end
 
-    my_sage()
-    |> execute([pool: Poolboy.start_link(), user_attrs: %{"email" => "foo@bar.com"}])
-    |> case do
-      {:ok, success, _effects} ->
-        {:ok, success}
+      my_sage()
+      |> execute([pool: Poolboy.start_link(), user_attrs: %{"email" => "foo@bar.com"}])
+      |> case do
+        {:ok, success, _effects} ->
+          {:ok, success}
 
-      {:error, reason} ->
-        Logger.error("Failed to execute with reason #{inspect(reason)}")
-        {:error, reason}
-    end
+        {:error, reason} ->
+          Logger.error("Failed to execute with reason #{inspect(reason)}")
+          {:error, reason}
+      end
 
   Wrapping Sage in a transaction:
 
-    # In this sage we don't need `&delete_user/2` and `&rollback_plan_for_a_user/3`,
-    # everything is rolled back as part of DB transaction
-    def my_db_aware_sage do
-      import Sage
+      # In this sage we don't need `&delete_user/2` and `&rollback_plan_for_a_user/3`,
+      # everything is rolled back as part of DB transaction
+      def my_db_aware_sage do
+        import Sage
 
-      new()
-      |> run(:user, &create_user/2)
-      |> run(:plans, &fetch_subscription_plans/3)
-      |> run(:subscription, &create_subscription/2, delete_subscription/3)
-      |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
-      |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
-      |> run(:update_user, &set_plan_for_a_user/2)
-      |> finally(&acknowledge_job/2)
-    end
+        new()
+        |> run(:user, &create_user/2)
+        |> run(:plans, &fetch_subscription_plans/3)
+        |> run(:subscription, &create_subscription/2, delete_subscription/3)
+        |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
+        |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
+        |> run(:update_user, &set_plan_for_a_user/2)
+        |> finally(&acknowledge_job/2)
+      end
 
-    my_db_aware_sage()
-    |> Sage.to_function(execute_opts)
-    |> Repo.transaction()
+      my_db_aware_sage()
+      |> Sage.to_function(execute_opts)
+      |> Repo.transaction()
   """
   use Application
 
@@ -117,8 +117,8 @@ defmodule Sage do
 
   Example:
 
-  | Attempt | Base Backoff | Max Backoff | Sleep time
-  | ------- | ------------ | ----------- | --------------
+  | Attempt | Base Backoff | Max Backoff | Sleep time |
+  |---------|--------------|-------------|----------------|
   | 1       | 10           | 30000       | 20 |
   | 2       | 10           | 30000       | 400 |
   | 3       | 10           | 30000       | 8000 |
@@ -134,8 +134,8 @@ defmodule Sage do
 
   Example:
 
-  | Attempt | Base Backoff | Max Backoff | Sleep interval
-  | ------- | ------------ | ----------- | --------------
+  | Attempt | Base Backoff | Max Backoff | Sleep interval |
+  |---------|--------------|-------------|----------------|
   | 1       | 10           | 30000       | 0..20 |
   | 2       | 10           | 30000       | 0..400 |
   | 3       | 10           | 30000       | 0..8000 |
