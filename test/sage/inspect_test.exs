@@ -19,19 +19,21 @@ defmodule Sage.InspectTest do
 
     string =
       """
-      step1: -> #{inspect(tx)}, \
-      step2: -> #{inspect(tx)}
-               <- #{inspect(cmp)}, \
-      step3: -> #{inspect(tx)} (async) [timeout: 5000]
-               <- #{inspect(cmp)}, \
-      step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
-               <- #{inspect(cmp)}, \
-      step5: -> Sage.InspectTest.transaction/2
-               <- #{inspect(cmp)}, \
-      step6: -> #{inspect(tx)}
-               <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar), \
-      step7: -> #{inspect(tx)}
+      #Sage<
+        step1: -> #{inspect(tx)},
+        step2: -> #{inspect(tx)}
+               <- #{inspect(cmp)},
+        step3: -> #{inspect(tx)} (async) [timeout: 5000]
+               <- #{inspect(cmp)},
+        step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
+               <- #{inspect(cmp)},
+        step5: -> Sage.InspectTest.transaction/2
+               <- #{inspect(cmp)},
+        step6: -> #{inspect(tx)}
+               <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
+        step7: -> #{inspect(tx)}
                <- Sage.InspectTest.compensation/3
+      >
       """
       |> String.trim()
 
@@ -49,9 +51,9 @@ defmodule Sage.InspectTest do
 
     string =
       """
-      finally: #{inspect(fun)}, \
-      finally: Sage.InspectTest.do_send/2, \
-      finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)
+      #Sage<finally: #{inspect(fun)},
+            finally: Sage.InspectTest.do_send/2,
+            finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
       """
       |> String.trim()
 
@@ -67,9 +69,6 @@ defmodule Sage.InspectTest do
   end
 
   def i(%{on_compensation_error: :raise} = sage) do
-    assert "#Sage<" <> rest = inspect(sage, limit: 50, printable_limit: 4096, width: 80)
-    size = byte_size(rest)
-    assert ">" = :binary.part(rest, size - 1, 1)
-    :binary.part(rest, 0, size - 1)
+    inspect(sage, limit: 50, printable_limit: 4096, width: 80, pretty: true)
   end
 end

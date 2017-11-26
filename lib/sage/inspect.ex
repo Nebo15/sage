@@ -63,6 +63,6 @@ defimpl Inspect, for: Sage do
 
   defp maybe_expand_args(args, default_args) do
     args = Enum.map(args, &Kernel.inspect/1)
-    "(" <> ((default_args ++ args) |> Enum.join(", ")) <> ")"
+    concat(["(", Enum.join(default_args ++ args, ", "), ")"])
   end
 end
