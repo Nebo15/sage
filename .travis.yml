@@ -4,7 +4,7 @@ cache:
   - deps
   - _build/test
 elixir:
-  - 1.5.0
+  - 1.5.2
 otp_release:
   - 20.0
 env:

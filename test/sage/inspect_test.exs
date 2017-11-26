@@ -18,26 +18,43 @@ defmodule Sage.InspectTest do
       |> run(:step7, tx, {__MODULE__, :compensation, []})
 
     string =
-      """
-      #Sage<
-        step1: -> #{inspect(tx)},
-        step2: -> #{inspect(tx)}
-               <- #{inspect(cmp)},
-        step3: -> #{inspect(tx)} (async) [timeout: 5000]
-               <- #{inspect(cmp)},
-        step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
-               <- #{inspect(cmp)},
-        step5: -> Sage.InspectTest.transaction/2
-               <- #{inspect(cmp)},
-        step6: -> #{inspect(tx)}
-               <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
-        step7: -> #{inspect(tx)}
-               <- Sage.InspectTest.compensation/3
-      >
-      """
-      |> String.trim()
+      if Version.compare("1.6.0-dev", System.version()) in [:lt, :eq] do
+        """
+        #Sage<
+          step1: -> #{inspect(tx)},
+          step2: -> #{inspect(tx)}
+                 <- #{inspect(cmp)},
+          step3: -> #{inspect(tx)} (async) [timeout: 5000]
+                 <- #{inspect(cmp)},
+          step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
+                 <- #{inspect(cmp)},
+          step5: -> Sage.InspectTest.transaction/2
+                 <- #{inspect(cmp)},
+          step6: -> #{inspect(tx)}
+                 <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
+          step7: -> #{inspect(tx)}
+                 <- Sage.InspectTest.compensation/3
+        >
+        """
+      else
+        """
+        #Sage<step1: -> #{inspect(tx)},
+         step2: -> #{inspect(tx)}
+                <- #{inspect(cmp)},
+         step3: -> #{inspect(tx)} (async) [timeout: 5000]
+                <- #{inspect(cmp)},
+         step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
+                <- #{inspect(cmp)},
+         step5: -> Sage.InspectTest.transaction/2
+                <- #{inspect(cmp)},
+         step6: -> #{inspect(tx)}
+                <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
+         step7: -> #{inspect(tx)}
+                <- Sage.InspectTest.compensation/3>
+        """
+      end
 
-    assert i(sage) == string
+    assert i(sage) == String.trim(string)
   end
 
   test "outputs final hooks" do
@@ -50,14 +67,21 @@ defmodule Sage.InspectTest do
       |> finally({__MODULE__, :do_send, []})
 
     string =
-      """
-      #Sage<finally: #{inspect(fun)},
-            finally: Sage.InspectTest.do_send/2,
-            finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
-      """
-      |> String.trim()
+      if Version.compare("1.6.0-dev", System.version()) in [:lt, :eq] do
+        """
+        #Sage<finally: #{inspect(fun)},
+              finally: Sage.InspectTest.do_send/2,
+              finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
+        """
+      else
+        """
+        #Sage<finally: #{inspect(fun)},
+         finally: Sage.InspectTest.do_send/2,
+         finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
+        """
+      end
 
-    assert i(sage) == string
+    assert i(sage) == String.trim(string)
   end
 
   test "outputs compensation error handler" do
