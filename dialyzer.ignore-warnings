@@ -1,5 +1,5 @@
 lib/sage/executor.ex:395: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 lib/sage/executor.ex:462: Expression produces a value of type [any()], but this value is unmatched
-lib/sage/exceptions.ex:53: Type specification 'Elixir.Sage.DuplicateOperationError':exception(elixir:keyword()) ->
-lib/sage/exceptions.ex:73: Type specification 'Elixir.Sage.DuplicateTracerError':exception(elixir:keyword()) ->
-lib/sage/exceptions.ex:93: Type specification 'Elixir.Sage.DuplicateFinalHookError':exception(elixir:keyword()) -> 'Elixir.Exception':t()
+lib/sage/exceptions.ex:56: Type specification 'Elixir.Sage.DuplicateOperationError':exception(elixir:keyword()) ->
+lib/sage/exceptions.ex:77: Type specification 'Elixir.Sage.DuplicateTracerError':exception(elixir:keyword()) ->
+lib/sage/exceptions.ex:98: Type specification 'Elixir.Sage.DuplicateFinalHookError':exception(elixir:keyword()) -> 'Elixir.Exception':t()
