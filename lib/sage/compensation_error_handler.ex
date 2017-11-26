@@ -17,8 +17,9 @@ defmodule Sage.CompensationErrorHandler do
           | {:exit, reason :: any()}
           | {:throw, error :: any()}
 
-  @type compensations_to_run ::
-          [{name :: Sage.stage_name(), compensation :: Sage.compensation(), effect_to_compensate :: any()}]
+  @type compensations_to_run :: [
+          {name :: Sage.stage_name(), compensation :: Sage.compensation(), effect_to_compensate :: any()}
+        ]
 
   @doc """
   Handler for critical errors for compensation execution.

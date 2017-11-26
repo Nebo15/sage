@@ -222,7 +222,7 @@ defmodule Sage do
   """
   @type compensation ::
           (effect_to_compensate() :: any(),
-           {stage_name :: stage_name(), failed_value :: any()},
+           {failed_stage_name :: stage_name(), failed_value :: any()},
            execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
