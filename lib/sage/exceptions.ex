@@ -4,6 +4,7 @@ defmodule Sage.EmptyError do
   """
   defexception [:message]
 
+  @doc false
   def exception(_opts) do
     message = "trying to execute empty Sage is not allowed"
     %__MODULE__{message: message}
@@ -17,6 +18,7 @@ defmodule Sage.UnexpectedCircuitBreakError do
   """
   defexception [:compensation_name, :failed_transaction_name]
 
+  @impl true
   def message(%__MODULE__{compensation_name: compensation_name, failed_transaction_name: failed_transaction_name}) do
     """
     Compensation #{to_string(compensation_name)} tried to apply circuit
@@ -38,6 +40,7 @@ defmodule Sage.AsyncTransactionTimeoutError do
   """
   defexception [:name, :timeout]
 
+  @impl true
   def message(%__MODULE__{name: name, timeout: timeout}) do
     """
     asynchronous transaction for operation #{name} has timed out,
@@ -52,6 +55,7 @@ defmodule Sage.DuplicateOperationError do
   """
   defexception [:message]
 
+  @impl true
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
     name = Keyword.fetch!(opts, :name)
@@ -72,6 +76,7 @@ defmodule Sage.DuplicateTracerError do
   """
   defexception [:message]
 
+  @impl true
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
     module = Keyword.fetch!(opts, :module)
@@ -92,6 +97,7 @@ defmodule Sage.DuplicateFinalHookError do
   """
   defexception [:message]
 
+  @impl true
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
     callback = Keyword.fetch!(opts, :hook)
@@ -115,6 +121,7 @@ defmodule Sage.MalformedTransactionReturnError do
   """
   defexception [:transaction, :return]
 
+  @impl true
   def message(%__MODULE__{transaction: transaction, return: return}) do
     """
     expected transaction #{inspect(transaction)} to return
@@ -131,6 +138,7 @@ defmodule Sage.MalformedCompensationReturnError do
   """
   defexception [:compensation, :return]
 
+  @impl true
   def message(%__MODULE__{compensation: compensation, return: return}) do
     """
     expected compensation #{inspect(compensation)} to return
