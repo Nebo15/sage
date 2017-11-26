@@ -67,7 +67,7 @@ defmodule Sage.InspectTest do
   end
 
   def i(%{on_compensation_error: :raise} = sage) do
-    assert "#Sage<" <> rest = inspect(sage)
+    assert "#Sage<" <> rest = inspect(sage, limit: 50, printable_limit: 4096, width: 80)
     size = byte_size(rest)
     assert ">" = :binary.part(rest, size - 1, 1)
     :binary.part(rest, 0, size - 1)
