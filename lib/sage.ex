@@ -125,7 +125,6 @@ defmodule Sage do
   | 4       | 10           | 30000       | 30000 |
   | 5       | 10           | 30000       | 30000 |
 
-
   When jitter is enabled backoff value is randomized:
 
   ```
@@ -337,7 +336,7 @@ defmodule Sage do
   end
 
   @doc """
-  Appends sage with an transaction and function to compensate it's effect.
+  Appends sage with a transaction and function to compensate it's effect.
 
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
@@ -350,7 +349,7 @@ defmodule Sage do
     do: add_stage(sage, name, build_operation!(:run, transaction, compensation))
 
   @doc """
-  Appends sage with an transaction that does not have side effect.
+  Appends sage with a transaction that does not have side effect.
 
   This is an alias for calling `run/4` with a `:noop` instead of compensation callback.
 
