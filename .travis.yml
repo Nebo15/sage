@@ -6,7 +6,7 @@ cache:
 elixir:
   - 1.5.2
 otp_release:
-  - 20.0
+  - 20.1.7
 env:
   global:
     - MIX_ENV=test
