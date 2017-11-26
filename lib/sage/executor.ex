@@ -310,7 +310,7 @@ defmodule Sage.Executor do
        when not elem(state, 3) do
     {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state
 
-    if Keyword.fetch!(retry_opts, :retry_limit) > count do
+    if Sage.RetryPolicy.retry(count, retry_opts) do
       state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, [], on_compensation_error, tracers}
       {:retry_transaction, {name, operation}, state}
     else
@@ -396,13 +396,14 @@ defmodule Sage.Executor do
                acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
            end)
 
-      _ = Logger.warn("""
-      [Sage] compensation #{inspect(name)} failed to compensate effect:
+      _ =
+        Logger.warn("""
+        [Sage] compensation #{inspect(name)} failed to compensate effect:
 
-        #{inspect(compensated_effect)}
+          #{inspect(compensated_effect)}
 
-      #{compensation_error_message(error)}
-      """)
+        #{compensation_error_message(error)}
+        """)
 
       case error do
         {:raise, {exception, stacktrace}} ->
