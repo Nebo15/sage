@@ -15,6 +15,19 @@ defmodule Sage.ExecutorTest do
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
+    test "are executed with Executor" do
+      result =
+        new()
+        |> run(:step1, transaction(:t1), compensation())
+        |> run(:step2, transaction(:t2), compensation())
+        |> run(:step3, {__MODULE__, :mfa_transaction, [transaction(:t3)]}, compensation())
+        |> assert_finally_succeeds(a: :b)
+        |> Sage.Executor.execute()
+
+      assert_effects([:t1, :t2, :t3])
+      assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
+    end
+
     test "are awaiting on next synchronous operation when executes asynchronous transactions" do
       result =
         new()
@@ -634,7 +647,7 @@ defmodule Sage.ExecutorTest do
 
       for step <- [:step1, :step2, :step3, :step4, :step5] do
         assert_receive {^step, :start_compensation, _tracing_state}
-        assert_receive {^step, :finish_compensation, time_taken, _tracing_state} when time_taken > 100_000
+        assert_receive {^step, :finish_compensation, time_taken, _tracing_state}
         assert div(System.convert_time_unit(time_taken, :native, :micro_seconds), 100) / 10 > 0.9
       end
     end

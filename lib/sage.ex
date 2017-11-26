@@ -92,6 +92,67 @@ defmodule Sage do
   @type async_opts :: [{:timeout, integer() | :infinity}]
 
   @typedoc """
+  Retry options.
+
+  Sage internally stores count of retries for whole Sage execution,
+  the value is shared across all compensations so it is possible to retry
+  with on various options, but with making sure that transactions won't be
+  retried infinitely.
+
+  Available retry options:
+    * `:retry_limit` - is the maximum number of possible retry attempts;
+    * `:base_backoff` - is the base backoff for retries in ms, no backoff is applied if this value is nil or not set;
+    * `:max_backoff` - is the maximum backoff value, default: `5_000` ms.;
+    * `:enable_jitter` - whatever jitter is applied to backoff value, default: `true`;
+
+  Sage will log and ignore if options are invalid.
+
+  ## Backoff calculation
+
+  For exponential backoff this formula is used:
+
+  ```
+  min(max_backoff, (base_backoff * 2) ^ retry_count)
+  ```
+
+  Example:
+
+  | Attempt | Base Backoff | Max Backoff | Sleep time
+  | ------- | ------------ | ----------- | --------------
+  | 1       | 10           | 30000       | 20 |
+  | 2       | 10           | 30000       | 400 |
+  | 3       | 10           | 30000       | 8000 |
+  | 4       | 10           | 30000       | 30000 |
+  | 5       | 10           | 30000       | 30000 |
+
+
+  When jitter is enabled backoff value is randomized:
+
+  ```
+  random(0, min(max_backoff, (base_backoff * 2) ^ retry_count))
+  ```
+
+  Example:
+
+  | Attempt | Base Backoff | Max Backoff | Sleep interval
+  | ------- | ------------ | ----------- | --------------
+  | 1       | 10           | 30000       | 0..20 |
+  | 2       | 10           | 30000       | 0..400 |
+  | 3       | 10           | 30000       | 0..8000 |
+  | 4       | 10           | 30000       | 0..30000 |
+  | 5       | 10           | 30000       | 0..30000 |
+
+  For more reasoning behind using jitter, check out
+  [this blog post](https://aws.amazon.com/ru/blogs/architecture/exponential-backoff-and-jitter/).
+  """
+  @type retry_opts :: [
+          {:retry_limit, pos_integer()},
+          {:base_backoff, pos_integer() | nil},
+          {:max_backoff, pos_integer()},
+          {:enable_jitter, boolean()}
+        ]
+
+  @typedoc """
   Transaction callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
 
   Receives effects created by preceding executed transactions and options passed to `execute/2` function.
@@ -163,7 +224,7 @@ defmodule Sage do
           (effect_to_compensate() :: any(),
            {operation_operation_name :: name(), failed_value :: any()},
            execute_opts :: any() ->
-             :ok | :abort | {:retry, [{:retry_limit, integer()}]} | {:continue, any()})
+             :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
           | mfa()
 

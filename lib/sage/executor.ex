@@ -310,7 +310,7 @@ defmodule Sage.Executor do
        when not elem(state, 3) do
     {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state
 
-    if Sage.RetryPolicy.retry(count, retry_opts) do
+    if Sage.RetryPolicy.retry_with_backoff?(count, retry_opts) do
       state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, [], on_compensation_error, tracers}
       {:retry_transaction, {name, operation}, state}
     else
