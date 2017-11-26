@@ -1,86 +1,68 @@
 defimpl Inspect, for: Sage do
   import Inspect.Algebra
 
+  @tx_symbol "->"
+  @cmp_symbol "<-"
+  @tx_args [:effects_so_far, :opts]
+  @cmp_args [:effect_to_compensate, :name_and_reason, :opts]
+  @final_hook_args [:name, :state]
+
   def inspect(sage, opts) do
-    %{
-      operations: operations,
-      final_hooks: final_hooks,
-      on_compensation_error: on_compensation_error
-    } = sage
-
-    final_hooks = for hook <- final_hooks, do: {:finally, hook}
-
-    on_compensation_error =
-      if on_compensation_error == :raise do
-        "!"
-      else
-        concat(["(with ", to_doc(on_compensation_error, opts), ")"])
-      end
-
-    operations = Enum.reverse(operations) ++ final_hooks
-
-    surround_many(concat(["#Sage", on_compensation_error ,"<"]), operations , ">", opts, fn
-      {name, {kind, transaction, compensation, tx_opts}}, opts ->
-        kind = if kind == :run_async, do: " (async)", else: ""
-
-        tx = concat([
-          format_transaction_callback(transaction, opts),
-          kind,
-          format_transaction_opts(tx_opts),
-        ])
-
-        cmp = format_compensation_callback(compensation, opts)
-
-        concat([
-          Atom.to_string(name),
-          ":",
-          nest(line(tx, cmp), 6)
-        ])
-
-      {:finally, hook}, opts ->
-        concat([
-          "finally: ",
-          format_final_hook(hook, opts)
-        ])
-    end)
+    list = to_list(sage)
+    left = concat(["#Sage", format_compensation_error_handler(sage.on_compensation_error), "<"])
+    surround_many(left, list, ">", opts, fn str, _ -> str end)
   end
 
-  def format_transaction_opts([]), do: ""
-  def format_transaction_opts(tx_opts), do: concat([" ", Kernel.inspect(tx_opts)])
-
-  def format_transaction_callback({m, f, []}, _opts) do
-    "  -> #{Kernel.inspect(m)}.#{Kernel.to_string(f)}/2"
-  end
-  def format_transaction_callback({m, f, a}, _opts) do
-    args = a |> Enum.map(&Kernel.inspect/1) |> Enum.join(", ")
-    "  -> #{Kernel.inspect(m)}.#{Kernel.to_string(f)}(effects_so_far, opts, #{args})"
-  end
-  def format_transaction_callback(cb, opts) do
-    concat("  -> ", to_doc(cb, opts))
+  defp to_list(sage) do
+    operations = sage.operations |> Enum.reverse() |> Enum.map(&format_stage/1)
+    final_hooks = Enum.map(sage.final_hooks, &concat("finally: ", format_final_hook(&1)))
+    Enum.concat([operations, final_hooks])
   end
 
-  def format_compensation_callback({m, f, []}, _opts) do
-    "  <- #{Kernel.inspect(m)}.#{Kernel.to_string(f)}/3"
-  end
-  def format_compensation_callback({m, f, a}, _opts) do
-    args = a |> Enum.map(&Kernel.inspect/1) |> Enum.join(", ")
-    "  <- #{Kernel.inspect(m)}.#{Kernel.to_string(f)}(effect_to_compensate, name_and_reason, opts, #{args})"
-  end
-  def format_compensation_callback(:noop, _opts) do
-    ""
-  end
-  def format_compensation_callback(cb, opts) do
-    concat("  <- ", to_doc(cb, opts))
+  defp format_stage({name, operation}) do
+    name = "#{Atom.to_string(name)}: "
+    group(concat([name, nest(build_operation(operation), String.length(name))]))
   end
 
-  def format_final_hook({m, f, []}, _opts) do
-    "#{Kernel.inspect(m)}.#{Kernel.to_string(f)}/2"
+  defp build_operation({kind, transaction, compensation, tx_opts}) do
+    tx = concat([format_transaction_callback(transaction), format_kind(kind), format_transaction_opts(tx_opts)])
+    cmp = format_compensation_callback(compensation)
+    glue_operation(tx, cmp)
   end
-  def format_final_hook({m, f, a}, _opts) do
-    args = a |> Enum.map(&Kernel.inspect/1) |> Enum.join(", ")
-    "#{Kernel.inspect(m)}.#{Kernel.to_string(f)}(name, state, #{args})"
+
+  defp glue_operation(tx, ""), do: tx
+  defp glue_operation(tx, cmp), do: line(tx, cmp)
+
+  defp format_kind(:run_async), do: " (async)"
+  defp format_kind(:run), do: ""
+
+  defp format_compensation_error_handler(:raise), do: ""
+  defp format_compensation_error_handler(handler), do: concat(["(with ", Kernel.inspect(handler), ")"])
+
+  defp format_transaction_opts([]), do: ""
+  defp format_transaction_opts(tx_opts), do: concat([" ", Kernel.inspect(tx_opts)])
+
+  defp format_transaction_callback(callback), do: concat([@tx_symbol, " ", format_callback(callback, @tx_args)])
+
+  defp format_compensation_callback(:noop), do: ""
+  defp format_compensation_callback(callback), do: concat([@cmp_symbol, " ", format_callback(callback, @cmp_args)])
+
+  defp format_final_hook(callback), do: format_callback(callback, @final_hook_args)
+
+  defp format_callback({module, function, args}, default_args) do
+    concat([Kernel.inspect(module), ".", Kernel.to_string(function), maybe_expand_args(args, default_args)])
   end
-  def format_final_hook(hook, opts) do
-    to_doc(hook, opts)
+
+  defp format_callback(function, _default_args) do
+    Kernel.inspect(function)
+  end
+
+  defp maybe_expand_args([], default_args) do
+    "/#{to_string(length(default_args))}"
+  end
+
+  defp maybe_expand_args(args, default_args) do
+    args = Enum.map(args, &Kernel.inspect/1)
+    "(" <> ((default_args ++ args) |> Enum.join(", ")) <> ")"
   end
 end
