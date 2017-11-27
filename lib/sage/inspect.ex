@@ -31,7 +31,7 @@ defimpl Inspect, for: Sage do
   end
 
   defp glue_operation(tx, ""), do: tx
-  defp glue_operation(tx, cmp), do: line(tx, cmp)
+  defp glue_operation(tx, cmp), do: glue(tx, cmp)
 
   defp format_kind(:run_async), do: " (async)"
   defp format_kind(:run), do: ""
