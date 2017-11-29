@@ -149,7 +149,7 @@ defmodule Sage.MalformedCompensationReturnError do
   end
 end
 
-defmodule Sage.ExecutorPlannerError do
+defmodule Sage.Executor.PlannerError do
   @moduledoc """
   Raised at runtime when it's not possible to build a plan for Sage execution.
   """

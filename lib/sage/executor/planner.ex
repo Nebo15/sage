@@ -3,30 +3,43 @@ defmodule Sage.Executor.Planner do
   This module is the one responsible for planning asynchronous transactions dependencies
   and making sure their dependency graph converges.
   """
-  import Sage.ExecutorPlannerError
+  import Sage.Executor.PlannerError
 
   def plan_execution(%Sage{} = sage) do
-    {plan, _stage_names} =
-      sage.stages
-      |> Enum.reduce([], fn
-        stage, [] ->
-          [stage]
+    sage.stages
+    |> group_async_stages()
+    |> topological_sort_groups()
+    |> Enum.reverse()
+  end
 
-        stage, [{:stages_group, prev_stages} | rest_stages] = acc ->
-          if async_stage?(stage) do
-            [{:stages_group, [stage] ++ prev_stages}] ++ rest_stages
-          else
-            [stage] ++ acc
-          end
+  # Groups multiple adjustment stages
+  defp group_async_stages(stages) do
+    Enum.reduce(stages, [], fn
+      stage, [] ->
+        [stage]
 
-        stage, [prev_stage | rest_stages] = acc ->
-          if async_stage?(stage) && async_stage?(prev_stage) do
-            [{:stages_group, [prev_stage, stage]}] ++ rest_stages
-          else
-            [stage] ++ acc
-          end
-      end)
-      |> Enum.reduce({[], []}, fn
+      stage, [{:stages_group, prev_stages} | rest_stages] = acc ->
+        if async_stage?(stage) do
+          [{:stages_group, [stage] ++ prev_stages}] ++ rest_stages
+        else
+          [stage] ++ acc
+        end
+
+      stage, [prev_stage | rest_stages] = acc ->
+        if async_stage?(stage) && async_stage?(prev_stage) do
+          [{:stages_group, [prev_stage, stage]}] ++ rest_stages
+        else
+          [stage] ++ acc
+        end
+    end)
+  end
+
+  defp async_stage?({_name, operation}) when elem(operation, 0) == :run_async, do: true
+  defp async_stage?(_), do: false
+
+  defp topological_sort_groups(stages) do
+    {stages, _stage_names} =
+      Enum.reduce(stages, {[], []}, fn
         {:stages_group, stages_group}, {stages, reachable_stage_names} ->
           sorted = topological_sort(stages_group, reachable_stage_names)
           {Enum.reverse(sorted) ++ stages, Enum.map(sorted, &elem(&1, 0)) ++ reachable_stage_names}
@@ -34,28 +47,16 @@ defmodule Sage.Executor.Planner do
         {name, operation} = stage, {stages, reachable_stage_names} ->
           operation
           |> operation_deps()
-          |> Enum.each(fn dep ->
-            if dep == name do
-              raise Sage.ExecutorPlannerError, dependency_on_itself_message(name)
-            end
+          |> Enum.each(&raise_on_invalid_dependency!(name, &1, reachable_stage_names))
 
-            if dep not in reachable_stage_names do
-              raise Sage.ExecutorPlannerError, unreachable_dependency_message(name, dep)
-            end
-          end)
-
-          {[stage] ++ stages, [elem(stage, 0)] ++ reachable_stage_names}
+          {[stage] ++ stages, [name] ++ reachable_stage_names}
       end)
 
-    Enum.reverse(plan)
+    stages
   end
-
-  defp async_stage?({_name, operation}) when elem(operation, 0) == :run_async, do: true
-  defp async_stage?(_), do: false
 
   def topological_sort(stages, reachable_stage_names) do
     graph = :digraph.new()
-    graph_names = Enum.map(stages, &elem(&1, 0))
 
     try do
       Enum.each(stages, fn {name, _operation} ->
@@ -66,18 +67,10 @@ defmodule Sage.Executor.Planner do
         deps = operation_deps(operation)
 
         Enum.each(deps, fn dep ->
-          cond do
-            dep == name ->
-              raise Sage.ExecutorPlannerError, dependency_on_itself_message(name)
-
-            dep in reachable_stage_names ->
-              :noop
-
-            dep in graph_names ->
-              :digraph.add_edge(graph, dep, name)
-
-            dep not in reachable_stage_names ->
-              raise Sage.ExecutorPlannerError, unreachable_dependency_message(name, dep)
+          if dep != name and List.keymember?(stages, dep, 0) do
+            :digraph.add_edge(graph, dep, name)
+          else
+            raise_on_invalid_dependency!(name, dep, reachable_stage_names)
           end
         end)
       end)
@@ -87,7 +80,7 @@ defmodule Sage.Executor.Planner do
           List.keyfind(stages, name, 0)
         end)
       else
-        raise Sage.ExecutorPlannerError, can_not_converge_message()
+        raise Sage.Executor.PlannerError, can_not_converge_message()
       end
     after
       :digraph.delete(graph)
@@ -95,4 +88,12 @@ defmodule Sage.Executor.Planner do
   end
 
   defp operation_deps({_type, _tx, _cmp, opts}), do: opts |> Keyword.get(:after, []) |> List.wrap()
+
+  defp raise_on_invalid_dependency!(stage_name, stage_name, _reachable_stage_names),
+    do: raise Sage.Executor.PlannerError, dependency_on_itself_message(stage_name)
+  defp raise_on_invalid_dependency!(stage_name, dependency_name, reachable_stage_names) do
+    if dependency_name not in reachable_stage_names do
+      raise Sage.Executor.PlannerError, unreachable_dependency_message(stage_name, dependency_name)
+    end
+  end
 end

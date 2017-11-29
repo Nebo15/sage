@@ -40,7 +40,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run_async(:step2, transaction(:t2), compensation(), after: :step3)
         |> run(:step3, transaction(:t3), compensation())
 
-      assert_raise Sage.ExecutorPlannerError, "Unreachable dependency step3 for stage step2", fn ->
+      assert_raise Sage.Executor.PlannerError, "Unreachable dependency step3 for stage step2", fn ->
         plan_execution(sage)
       end
     end
@@ -53,7 +53,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run(:step3, transaction(:t3), compensation())
         |> run_async(:step4, transaction(:t4), compensation())
 
-      assert_raise Sage.ExecutorPlannerError, "Unreachable dependency step4 for stage step2", fn ->
+      assert_raise Sage.Executor.PlannerError, "Unreachable dependency step4 for stage step2", fn ->
         plan_execution(sage)
       end
 
@@ -65,21 +65,21 @@ defmodule Sage.Executor.PlannerTest do
         |> run(:step4, transaction(:t4), compensation())
         |> run_async(:step5, transaction(:t5), compensation())
 
-      assert_raise Sage.ExecutorPlannerError, "Unreachable dependency step5 for stage step2", fn ->
+      assert_raise Sage.Executor.PlannerError, "Unreachable dependency step5 for stage step2", fn ->
         plan_execution(sage)
       end
     end
 
     test "raises on dependency on undefined stages" do
       sage = run_async(new(), :step1, transaction(:t1), compensation(), after: :undefined)
-      assert_raise Sage.ExecutorPlannerError, "Unreachable dependency undefined for stage step1", fn ->
+      assert_raise Sage.Executor.PlannerError, "Unreachable dependency undefined for stage step1", fn ->
         plan_execution(sage)
       end
     end
 
     test "raises on stage that depends on itself" do
       sage = run_async(new(), :step1, transaction(:t1), compensation(), after: :step1)
-      assert_raise Sage.ExecutorPlannerError, "Stage step1 lists itself as a dependency", fn ->
+      assert_raise Sage.Executor.PlannerError, "Stage step1 lists itself as a dependency", fn ->
         plan_execution(sage)
       end
 
@@ -88,7 +88,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run_async(:step1, transaction(:t1), compensation())
         |> run_async(:step2, transaction(:t1), compensation(), after: :step2)
 
-      assert_raise Sage.ExecutorPlannerError, "Stage step2 lists itself as a dependency", fn ->
+      assert_raise Sage.Executor.PlannerError, "Stage step2 lists itself as a dependency", fn ->
         plan_execution(sage)
       end
     end
@@ -100,7 +100,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run_async(:step2, transaction(:t1), compensation(), after: :step1)
 
       message = "Could not sort dependencies. There are cycles in the dependency graph"
-      assert_raise Sage.ExecutorPlannerError, message, fn ->
+      assert_raise Sage.Executor.PlannerError, message, fn ->
         plan_execution(sage)
       end
 
@@ -111,7 +111,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run_async(:step3, transaction(:t1), compensation(), after: :step2)
 
       message = "Could not sort dependencies. There are cycles in the dependency graph"
-      assert_raise Sage.ExecutorPlannerError, message, fn ->
+      assert_raise Sage.Executor.PlannerError, message, fn ->
         plan_execution(sage)
       end
     end
@@ -138,7 +138,7 @@ defmodule Sage.Executor.PlannerTest do
         |> run_async(:step6, transaction(:t6), compensation(), after: [:step3, :step1])
         |> run_async(:step7, transaction(:t7), compensation())
 
-      expected_plan = [:step1, :step3, :step4, :step2, :step5, :step6, :step7]
+      expected_plan = [:step1, :step4, :step7, :step3, :step2, :step5, :step6]
       assert sage |> plan_execution() |> names() == expected_plan
     end
   end
