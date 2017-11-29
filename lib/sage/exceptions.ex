@@ -148,3 +148,17 @@ defmodule Sage.MalformedCompensationReturnError do
     """
   end
 end
+
+defmodule Sage.ExecutorPlannerError do
+  @moduledoc """
+  Raised at runtime when it's not possible to build a plan for Sage execution.
+  """
+  defexception [:message]
+
+  def dependency_on_itself_message(name),
+    do: "Stage #{name} lists itself as a dependency"
+  def unreachable_dependency_message(stage_name, dependency_name),
+    do: "Unreachable dependency #{dependency_name} for stage #{stage_name}"
+  def can_not_converge_message,
+    do: "Could not sort dependencies. There are cycles in the dependency graph"
+end
