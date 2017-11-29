@@ -1,4 +1,4 @@
-defmodule Sage.RetryPolicy do
+defmodule Sage.Executor.Retries do
   @moduledoc """
   This module implements retry logic with exponential back-off for compensations that want
   to retry transaction.

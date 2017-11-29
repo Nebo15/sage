@@ -1,7 +1,7 @@
-defmodule Sage.RetryPolicyTest do
+defmodule Sage.Executor.RetriesTest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureLog
-  import Sage.RetryPolicy
+  import Sage.Executor.Retries
 
   describe "retry_with_backoff?/2" do
     test "limits retry count" do
