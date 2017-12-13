@@ -3,7 +3,7 @@
 [![Deps Status](https://beta.hexfaktor.org/badge/all/github/Nebo15/sage.svg)](https://beta.hexfaktor.org/github/Nebo15/sage) [![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
 
 Sage is an dependency-free implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir. It is go to way when you dealing with distributed transactions, especially with
-an error recovery/cleanup. Sage guarantees that either all the transactions in a saga are
+an error recovery/cleanup. Sage does it's best to guarantee that either all the transactions in a saga are
 successfully completed or compensating transactions are run to amend a partial execution.
 
 > It’s like `Ecto.Multi` but across business logic and third-party APIs.
@@ -130,6 +130,27 @@ Along with more readable code, you getting:
 - Much simpler and easier to test code for transaction and compensation function implementations;
 - Retries, circuit breaking and asynchronous requests;
 - Declarative way to define your transactions and run them.
+
+## Execution Guarantees and Edge Cases
+
+While Sage will do its best to compensate failures in transaction and leave the system in a consistent state, there are some edge cases where it is not possible.
+
+1. What if my transaction has bugs or other errors?
+Transactions are wrapped in a `try..catch` block and would tolerate any exception, exit or rescue. After compensations, the error will be reraised.
+
+2. What if my compensation has bugs or other errors?
+By default, compensations would not try to handle any kinds of errors. But you can write an adapter to handle those. For more information see [Critical Error Handling](https://github.com/Nebo15/sage#for-compensations) section.
+
+3. What if the process that executes Sage or whole node fails?
+Right now Sage doesn't provide a way to tolerate failures of executing processes. (However, there is an [RFC that aims this](https://github.com/Nebo15/sage/issues/9).)
+
+4. What if external API fails and it's impossible to revert a step?
+In such cases, the process handling the pipeline will crash and the exception will be thrown. Make sure that you have a way of reacting to such cases (in some cases it might be acceptable to ignore the error while others might require a manual intervention).
+
+5. Can I be absolutely sure that everything went well?
+Unfortunately, you cannot. As with any other distributed system, messages can be lost, netwok can go down, hardware fails, etc. There are no way to programmatically solve all those cases, even retrying compensations won't help in many of them.
+
+For example, it's possible that the reply from the external API is lost even though the request actually succeeded. In such cases, you might try to retry the compensation which might have an unexpected result. Best way to solve this issue is to [write compensations in an idempotent way](https://hexdocs.pm/sage/Sage.html#t:compensation/0) and to always make sure that you have proper monitoring tools in place.
 
 ## Critical Error Handling
 
