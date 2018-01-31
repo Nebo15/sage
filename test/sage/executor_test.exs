@@ -540,6 +540,47 @@ defmodule Sage.ExecutorTest do
     refute_received {:finally, _, _, _}
   end
 
+  test "clause exceptions in compensations are raised and preserved" do
+    {hook, _hook_assertion} = final_hook_with_assertion(:error)
+    test_pid = self()
+    tx = transaction(:t3)
+
+    tx = fn effects_so_far, opts ->
+      send(test_pid, {:execute, :t3})
+      tx.(effects_so_far, opts)
+    end
+
+    error_prone_compensation = fn _effect_to_compensate, _name_and_reason, _opts ->
+      :unknown_module.call(:arg)
+
+      :ok
+    end
+
+    assert_raise UndefinedFunctionError,
+                 "function :unknown_module.call/1 is undefined (module :unknown_module is not available)",
+                 fn ->
+                   new()
+                   |> run(:step1, transaction(:t1), compensation_with_retry(3))
+                   |> run(:step2, transaction(:t2), compensation())
+                   |> run_async(:step3, tx, not_strict_compensation())
+                   |> run_async(:step4, transaction(:t4), not_strict_compensation())
+                   |> run(:step5, transaction_with_error(:t5), error_prone_compensation)
+                   |> finally(hook)
+                   |> execute()
+                 end
+
+    # Transactions are executed once
+    assert_receive {:execute, :t3}
+    refute_receive {:execute, :t3}
+
+    assert_effect(:t1)
+    assert_effect(:t2)
+    assert_effect(:t3)
+    assert_effect(:t4)
+
+    refute_received {:finally, _, _, _}
+  end
+
   test "compensations malformed return is reported by default" do
     {hook, _hook_assertion} = final_hook_with_assertion(:error, a: :b)
     test_pid = self()
