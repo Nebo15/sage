@@ -265,8 +265,9 @@ defmodule Sage.Executor do
 
   defp safe_apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts) do
     apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts)
+  rescue
+    exception -> {:raise, {exception, System.stacktrace()}}
   catch
-    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, error -> {:throw, error}
   else
