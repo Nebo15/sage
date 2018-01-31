@@ -152,7 +152,7 @@ While Sage will do its best to compensate failures in transaction and leave the 
     In such cases, the process handling the pipeline will crash and the exception will be thrown. Make sure that you have a way of reacting to such cases (in some cases it might be acceptable to ignore the error while others might require a manual intervention).
 
 5. Can I be absolutely sure that everything went well?
-    
+
     Unfortunately, you cannot. As with any other distributed system, messages can be lost, netwok can go down, hardware fails, etc. There are no way to programmatically solve all those cases, even retrying compensations won't help in many of them.
 
 For example, it's possible that the reply from the external API is lost even though the request actually succeeded. In such cases, you might try to retry the compensation which might have an unexpected result. Best way to solve this issue is to [write compensations in an idempotent way](https://hexdocs.pm/sage/Sage.html#t:compensation/0) and to always make sure that you have proper monitoring tools in place.
@@ -241,7 +241,7 @@ by adding `sage` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:sage, "~> 0.3.0"}
+    {:sage, "~> 0.3.2"}
   ]
 end
 ```
