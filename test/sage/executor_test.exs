@@ -254,6 +254,41 @@ defmodule Sage.ExecutorTest do
       hook_assertion.()
     end
 
+    test "when transaction raised a clause error" do
+      {hook, hook_assertion} = final_hook_with_assertion(:error)
+
+      test_pid = self()
+      tx = transaction(:t3)
+
+      tx = fn effects_so_far, opts ->
+        send(test_pid, {:execute, :t3})
+        tx.(effects_so_far, opts)
+      end
+
+      transaction_with_clause_error = fn %{unexpected: :pattern}, _opts ->
+        {:ok, :next}
+      end
+
+      assert_raise FunctionClauseError, ~r[no function clause matching in anonymous fn/2], fn ->
+        new()
+        |> run(:step1, transaction(:t1), compensation_with_retry(3))
+        |> run(:step2, transaction(:t2), compensation())
+        |> run_async(:step3, tx, not_strict_compensation())
+        |> run_async(:step4, transaction(:t4), not_strict_compensation())
+        |> run(:step5, transaction_with_clause_error)
+        |> finally(hook)
+        |> execute()
+      end
+
+      # Retries are applying when exception is raised
+      assert_receive {:execute, :t3}
+      assert_receive {:execute, :t3}
+
+      assert_no_effects()
+
+      hook_assertion.()
+    end
+
     test "when transaction throws an error" do
       {hook, hook_assertion} = final_hook_with_assertion(:error)
 

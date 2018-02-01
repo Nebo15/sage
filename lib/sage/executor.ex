@@ -135,8 +135,9 @@ defmodule Sage.Executor do
 
   defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
     apply_transaction_fun(transaction, effects_so_far, opts)
+  rescue
+    exception -> {:raise, {exception, System.stacktrace()}}
   catch
-    :error, exception -> {:raise, {exception, System.stacktrace()}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end
