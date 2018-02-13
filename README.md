@@ -235,8 +235,7 @@ For making it easier to understand what flow you should expect here are few addi
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `sage` to your list of dependencies in `mix.exs`:
+The package can be installed by adding [`sage`](https://hex.pm/packages/sage) to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
