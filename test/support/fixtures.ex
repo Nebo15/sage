@@ -3,6 +3,8 @@ defmodule Sage.Fixtures do
   alias Sage.EffectsAgent
   alias Sage.CounterAgent
 
+  @max_random_sleep_timeout 5
+
   def transaction(effect) do
     test_pid = self()
 
@@ -181,7 +183,7 @@ defmodule Sage.Fixtures do
   end
 
   defp random_sleep do
-    1..15
+    1..@max_random_sleep_timeout
     |> Enum.random()
     |> :timer.sleep()
   end

@@ -1,5 +1,5 @@
 defmodule SageTest do
-  use Sage.EffectsCase
+  use Sage.EffectsCase, async: true
   doctest Sage
 
   describe "with_compensation_error_handler/2" do

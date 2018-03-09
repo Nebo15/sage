@@ -1,5 +1,5 @@
 defmodule Sage.ExecutorTest do
-  use Sage.EffectsCase
+  use Sage.EffectsCase, async: true
 
   describe "transactions" do
     test "are executed" do
