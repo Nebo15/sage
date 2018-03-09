@@ -18,7 +18,7 @@ defmodule Sage.InspectTest do
       |> run(:step7, tx, {__MODULE__, :compensation, []})
 
     string =
-      if Version.compare("1.6.0-dev", System.version()) in [:lt, :eq] do
+      if Version.compare("1.6.0", System.version()) in [:lt, :eq] do
         """
         #Sage<
           step1: -> #{inspect(tx)},
@@ -66,20 +66,11 @@ defmodule Sage.InspectTest do
       |> finally({__MODULE__, :do_send, [:a, :b, :c]})
       |> finally({__MODULE__, :do_send, []})
 
-    string =
-      if Version.compare("1.6.0-dev", System.version()) in [:lt, :eq] do
-        """
-        #Sage<finally: #{inspect(fun)},
-              finally: Sage.InspectTest.do_send/2,
-              finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
-        """
-      else
-        """
-        #Sage<finally: #{inspect(fun)},
-         finally: Sage.InspectTest.do_send/2,
-         finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
-        """
-      end
+    string = """
+    #Sage<finally: #{inspect(fun)},
+     finally: Sage.InspectTest.do_send/2,
+     finally: Sage.InspectTest.do_send(name, state, :a, :b, :c)>
+    """
 
     assert i(sage) == String.trim(string)
   end
