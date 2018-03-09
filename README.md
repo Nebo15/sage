@@ -10,7 +10,7 @@ successfully completed or compensating transactions are run to amend a partial e
 >
 > -- <cite>@jayjun</cite>
 
-This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's best to make sure that it's and all predecessors compensations are completed.
+This is done by defining two way flow with transaction and compensation functions, if one of transactions fails Sage will do it's best to make sure that it's and all predecessors compensations are completed. However, it's important to notice that Sage can not protect you from failure of a node that executes the Sage.
 
 To visualize, let's imagine we have a 4-step transaction. Successful flow should look something like this:
 ```
@@ -153,7 +153,7 @@ While Sage will do its best to compensate failures in transaction and leave the 
 
 5. Can I be absolutely sure that everything went well?
 
-    Unfortunately, you cannot. As with any other distributed system, messages can be lost, netwok can go down, hardware fails, etc. There are no way to programmatically solve all those cases, even retrying compensations won't help in many of them.
+    Unfortunately, you cannot. As with any other distributed system, messages can be lost, network can go down, hardware fails, etc. There are no way to programmatically solve all those cases, even retrying compensations won't help in many of them.
 
 For example, it's possible that the reply from the external API is lost even though the request actually succeeded. In such cases, you might try to retry the compensation which might have an unexpected result. Best way to solve this issue is to [write compensations in an idempotent way](https://hexdocs.pm/sage/Sage.html#t:compensation/0) and to always make sure that you have proper monitoring tools in place.
 
