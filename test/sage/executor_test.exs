@@ -42,9 +42,9 @@ defmodule Sage.ExecutorTest do
         |> run_async(:step1, transaction(:t1), not_strict_compensation())
         |> run_async(:step2, transaction(:t2), not_strict_compensation())
         |> run(:step3, fn effects_so_far, opts ->
-             assert effects_so_far == %{step1: :t1, step2: :t2}
-             transaction(:t3).(effects_so_far, opts)
-           end)
+          assert effects_so_far == %{step1: :t1, step2: :t2}
+          transaction(:t3).(effects_so_far, opts)
+        end)
         |> finally(hook)
         |> execute(a: :b)
 

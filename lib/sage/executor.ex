@@ -389,15 +389,15 @@ defmodule Sage.Executor do
       compensations_to_run =
         [{name, operation} | stages]
         |> Enum.reduce([], fn
-             {_name, {_type, _transaction, :noop, _tx_opts}}, acc ->
-               acc
+          {_name, {_type, _transaction, :noop, _tx_opts}}, acc ->
+            acc
 
-             {^name, {_type, _transaction, compensation, _tx_opts}}, acc ->
-               acc ++ [{name, compensation, compensated_effect}]
+          {^name, {_type, _transaction, compensation, _tx_opts}}, acc ->
+            acc ++ [{name, compensation, compensated_effect}]
 
-             {name, {_type, _transaction, compensation, _tx_opts}}, acc ->
-               acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
-           end)
+          {name, {_type, _transaction, compensation, _tx_opts}}, acc ->
+            acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
+        end)
 
       _ =
         Logger.warn("""
@@ -459,14 +459,14 @@ defmodule Sage.Executor do
     :ok =
       filanlize_callbacks
       |> Enum.map(fn
-           {module, function, args} ->
-             args = [status, opts | args]
-             {{module, function, args}, apply_and_catch_errors(module, function, args)}
+        {module, function, args} ->
+          args = [status, opts | args]
+          {{module, function, args}, apply_and_catch_errors(module, function, args)}
 
-           callback ->
-             args = [status, opts]
-             {{callback, args}, apply_and_catch_errors(callback, args)}
-         end)
+        callback ->
+          args = [status, opts]
+          {{callback, args}, apply_and_catch_errors(callback, args)}
+      end)
       |> Enum.each(&maybe_log_errors/1)
 
     result
