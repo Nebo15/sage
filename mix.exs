@@ -6,8 +6,6 @@ defmodule Sage.Mixfile do
   def project do
     [
       app: :sage,
-      description: "Sagas pattern implementation for distributed or long lived transactions and their error handling.",
-      package: package(),
       version: @version,
       elixir: "~> 1.5",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -15,9 +13,18 @@ defmodule Sage.Mixfile do
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+
+      # Hex
+      description: "Sagas pattern implementation for distributed or long lived transactions and their error handling.",
+      package: package(),
+
+      # Docs
+      name: "Sage",
+      docs: docs(),
+
+      # Custom testing
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [coveralls: :test],
-      docs: [source_ref: "v#\{@version\}", main: "readme", extras: ["README.md"]],
       dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"]
     ]
   end
@@ -32,7 +39,6 @@ defmodule Sage.Mixfile do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:ex_doc, ">= 0.16.0", only: [:dev, :test]},
@@ -48,9 +54,19 @@ defmodule Sage.Mixfile do
     [
       contributors: ["Nebo #15"],
       maintainers: ["Nebo #15"],
+      source_ref: "v#{@version}",
       licenses: ["MIT"],
-      links: %{github: "https://github.com/Nebo15/annon.api"},
-      files: ~w(lib LICENSE.md mix.exs README.md)
+      links: %{"GitHub" => "https://github.com/Nebo15/sage"},
+      files: ~w(mix.exs .formatter.exs lib LICENSE.md README.md)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      source_ref: "v#\{@version\}",
+      source_url: "https://github.com/Nebo15/sage",
+      extras: ["README.md"]
     ]
   end
 end
