@@ -240,7 +240,7 @@ The package can be installed by adding [`sage`](https://hex.pm/packages/sage) to
 ```elixir
 def deps do
   [
-    {:sage, "~> 0.3.2"}
+    {:sage, "~> 0.3.3"}
   ]
 end
 ```

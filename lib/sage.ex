@@ -405,11 +405,33 @@ defmodule Sage do
   @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
   defdelegate execute(sage, opts \\ []), to: Sage.Executor
 
-  @doc """
-  Wraps `execute/2` into anonymous function to be run with a `Ecto.Repo.transaction/1`.
-  """
+  @doc false
+  @deprecated "Sage.to_function/2 was deprecated. Use Sage.transaction/3 instead."
   @spec to_function(sage :: t(), opts :: any()) :: function()
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
+
+  @doc """
+  Executes Sage with `Ecto.Repo.transaction/1`.
+
+  Transaction is rolled back on error.
+
+  Ecto must be included as application dependency.
+  """
+  @since "0.3.3"
+  @spec transaction(sage :: t(), repo :: module(), opts :: any()) ::
+          {:ok, result :: any(), effects :: effects()} | {:error, any()}
+  def transaction(%Sage{} = sage, repo, opts \\ []) do
+    repo.transaction(fn ->
+      case execute(sage, opts) do
+        {:ok, result, effects} -> {:ok, result, effects}
+        {:error, reason} -> repo.rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp add_stage(sage, name, operation) do
     %{stages: stages, stage_names: names} = sage
