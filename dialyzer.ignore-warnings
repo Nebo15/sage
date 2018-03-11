@@ -1,3 +1,4 @@
 Type specification 'Elixir.Sage.DuplicateStageError':exception(elixir:keyword()) ->
 Type specification 'Elixir.Sage.DuplicateTracerError':exception(elixir:keyword()) ->
 Type specification 'Elixir.Sage.DuplicateFinalHookError':exception(elixir:keyword()) -> 'Elixir.Exception':t()
+Unknown function 'Elixir.ExUnit
