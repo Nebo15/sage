@@ -338,11 +338,17 @@ defmodule Sage do
   @doc """
   Appends sage with a transaction and function to compensate it's effect.
 
+  Raises `Sage.DuplicateStageError` exception if stage name is duplicated for a given sage.
+
+  ### Callbacks
+
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
 
-  If transaction does not produce effect to compensate,
-  pass `:noop` instead of compensation callback or use `run/3`.
+  ### Noop compensation
+
+  If transaction does not produce effect to compensate, pass `:noop` instead of compensation
+  callback or use `run/3`.
   """
   @spec run(sage :: t(), name :: stage_name(), transaction :: transaction(), compensation :: compensation()) :: t()
   def run(sage, name, transaction, compensation) when is_atom(name),
@@ -352,9 +358,6 @@ defmodule Sage do
   Appends sage with a transaction that does not have side effect.
 
   This is an alias for calling `run/4` with a `:noop` instead of compensation callback.
-
-  Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
-  For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
   """
   @spec run(sage :: t(), name :: stage_name(), transaction :: transaction()) :: t()
   def run(sage, name, transaction) when is_atom(name),
@@ -363,14 +366,16 @@ defmodule Sage do
   @doc """
   Appends sage with an asynchronous transaction and function to compensate it's effect.
 
-  It's transaction callback would receive only effect created by preceding synchronous transactions.
+  Asynchronous transactions are awaited before the next synchronous transaction or in the end
+  of sage execution. If there is an error in asynchronous transaction, Sage will await for other
+  transactions to complete or fail and then compensate for all the effect created by them.
 
-  All asynchronous transactions are awaited before next synchronous transaction.
-  If there is an error in asynchronous transaction, Sage will await for other transactions to complete or fail and
-  then compensate for all the effect created by them.
+  # Callbacks
 
-  Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
-  For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
+  Transaction callback for asynchronous stages receives only effects created by preceding
+  synchronous transactions.
+
+  For more details see `run/4`.
 
   ## Options
 
