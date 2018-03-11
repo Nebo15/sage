@@ -4,22 +4,28 @@ cache:
   - deps
   - _build/test
 elixir:
-  - 1.5.2
   - 1.6.3
 otp_release:
-  - 20.1.7
+  - 20.2
 env:
   global:
     - MIX_ENV=test
+matrix:
+  include:
+    - otp_release: 20.2
+      elixir: 1.6.3
+      script:
+        # Run all tests except pending ones
+        - "mix test --exclude pending --trace"
+        # Make sure code is formatted
+        - "mix format --check-formatted"
+        # Check type safety
+        - "mix dialyzer"
+    - otp_release: 19.3
+      elixir: 1.5.3
 script:
-  # Install dependencies
-  - "mix deps.get"
   # Run all tests except pending ones
   - "mix test --exclude pending --trace"
-  # Make sure code is formatter
-  - "mix format --check-formatted"
-  # Check type safety
-  - "mix dialyzer --unmatched_returns --error_handling --race_conditions --underspecs"
 after_script:
   # Submit docs coverage to Inch CI
   - "mix inch.report"
