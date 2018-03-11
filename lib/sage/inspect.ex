@@ -3,6 +3,8 @@ defimpl Inspect, for: Sage do
 
   @tx_symbol "->"
   @cmp_symbol "<-"
+  @lock_symbol "l-"
+  @unlock_symbol "u-"
   @tx_args [:effects_so_far, :opts]
   @cmp_args [:effect_to_compensate, :name_and_reason, :opts]
   @final_hook_args [:name, :state]
@@ -24,17 +26,26 @@ defimpl Inspect, for: Sage do
     group(concat([name, nest(build_operation(operation), String.length(name))]))
   end
 
-  defp build_operation({kind, transaction, compensation, tx_opts}) do
-    tx = concat([format_transaction_callback(transaction), format_kind(kind), format_transaction_opts(tx_opts)])
+  defp build_operation({:run_async, transaction, compensation, tx_opts}) do
+    tx = concat([format_transaction_callback(transaction), " (async)", format_transaction_opts(tx_opts)])
     cmp = format_compensation_callback(compensation)
     glue_operation(tx, cmp)
   end
 
+  defp build_operation({:run, transaction, compensation, []}) do
+    tx = concat([format_transaction_callback(transaction)])
+    cmp = format_compensation_callback(compensation)
+    glue_operation(tx, cmp)
+  end
+
+  defp build_operation({:lock, lock_cb, unlock_cb, []}) do
+    l = format_lock_callback(lock_cb)
+    ul = format_unlock_callback(unlock_cb)
+    glue_operation(l, ul)
+  end
+
   defp glue_operation(tx, ""), do: tx
   defp glue_operation(tx, cmp), do: glue(tx, cmp)
-
-  defp format_kind(:run_async), do: " (async)"
-  defp format_kind(:run), do: ""
 
   defp format_compensation_error_handler(:raise), do: ""
   defp format_compensation_error_handler(handler), do: concat(["(with ", Kernel.inspect(handler), ")"])
@@ -46,6 +57,10 @@ defimpl Inspect, for: Sage do
 
   defp format_compensation_callback(:noop), do: ""
   defp format_compensation_callback(callback), do: concat([@cmp_symbol, " ", format_callback(callback, @cmp_args)])
+
+  defp format_lock_callback(callback), do: concat([@lock_symbol, " ", format_callback(callback, @tx_args)])
+
+  defp format_unlock_callback(callback), do: concat([@unlock_symbol, " ", format_callback(callback, @tx_args)])
 
   defp format_final_hook(callback), do: format_callback(callback, @final_hook_args)
 

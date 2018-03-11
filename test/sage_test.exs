@@ -154,6 +154,14 @@ defmodule SageTest do
       assert MapSet.member?(names, :step1)
     end
 
+    test "adds transaction via mfa tuple to a sage" do
+      tx = transaction(:t1)
+      cmp = {__MODULE__, :dummy_transaction_for_mfa, []}
+      %Sage{stages: stages, stage_names: names} = run(new(), :step1, tx, cmp)
+      assert {:step1, {:run, tx, cmp, []}} in stages
+      assert MapSet.member?(names, :step1)
+    end
+
     test "adds compensation via mfa tuple to a sage" do
       tx = transaction(:t1)
       cmp = {__MODULE__, :dummy_compensation_for_mfa, []}
@@ -198,6 +206,96 @@ defmodule SageTest do
     end
   end
 
+  describe "lock/4" do
+    test "adds lock and unlock via anonymous functions to a sage" do
+      lock_cb = lock(:l1)
+      unlock_cb = unlock()
+      %Sage{stages: stages, stage_names: names, lock_names: lock_names} = lock(new(), :resource1, lock_cb, unlock_cb)
+      assert {:resource1, {:lock, lock_cb, unlock_cb, []}} in stages
+      assert MapSet.member?(names, :resource1)
+      assert MapSet.member?(lock_names, :resource1)
+    end
+
+    test "adds lock and unlock via mfa tuple to a sage" do
+      lock_cb = {__MODULE__, :dummy_lock_for_mfa, []}
+      unlock_cb = {__MODULE__, :dummy_unlock_for_mfa, []}
+      %Sage{stages: stages, stage_names: names, lock_names: lock_names} = lock(new(), :resource1, lock_cb, unlock_cb)
+      assert {:resource1, {:lock, lock_cb, unlock_cb, []}} in stages
+      assert MapSet.member?(names, :resource1)
+      assert MapSet.member?(lock_names, :resource1)
+    end
+
+    test "raises when on duplicate names" do
+      message = ~r":resource1 is already a member of the Sage:"
+
+      assert_raise Sage.DuplicateStageError, message, fn ->
+        new()
+        |> lock(:resource1, lock(:r1), unlock())
+        |> lock(:resource1, lock(:r1), unlock())
+      end
+    end
+  end
+
+  describe "unlock/2" do
+    test "adds unlocks to a sage" do
+      sage =
+        new()
+        |> lock(:resource1, lock(:r1), unlock())
+        |> unlock(:resource1)
+
+      %Sage{stages: stages, stage_names: names, lock_names: lock_names} = sage
+      assert {:unlock, :resource1} in stages
+      assert MapSet.member?(names, :resource1)
+      refute MapSet.member?(lock_names, :resource1)
+    end
+
+    test "raises when resource is not locked" do
+      message = ~r"can not release lock :resource1 because it's not defined"
+
+      assert_raise Sage.LockNotFoundError, message, fn ->
+        unlock(new(), :resource1)
+      end
+    end
+
+    test "raises when resource is already unlocked" do
+      message = ~r"can not release a lock :resource1 because it's already released"
+
+      assert_raise Sage.AlreadyUnlockedError, message, fn ->
+        new()
+        |> lock(:resource1, lock(:r1), unlock())
+        |> unlock(:resource1)
+        |> unlock(:resource1)
+      end
+    end
+  end
+
+  describe "unlock_all/1" do
+    test "adds unlock for all acquired locks in a sage" do
+      sage =
+        new()
+        |> lock(:resource1, lock(:r1), unlock())
+        |> lock(:resource2, lock(:r2), unlock())
+        |> lock(:resource3, lock(:r3), unlock())
+        |> unlock(:resource3)
+        |> unlock_all()
+
+      assert {:unlock, :resource1} in sage.stages
+      assert {:unlock, :resource2} in sage.stages
+      assert {:unlock, :resource3} in sage.stages
+
+      unlocks = sage.stages |> Enum.filter(fn {name, _operation} -> name == :unlock end) |> Enum.map(&elem(&1, 1))
+      assert Enum.uniq(unlocks) == unlocks
+    end
+
+    test "does not add unlocks if there are no locked resources" do
+      %Sage{stages: [], stage_names: names, lock_names: lock_names} = unlock_all(new())
+      assert MapSet.to_list(names) == []
+      assert MapSet.to_list(lock_names) == []
+    end
+  end
+
+  def dummy_lock_for_mfa(_opts), do: raise("Not implemented")
+  def dummy_unlock_for_mfa(_resource, _opts), do: raise("Not implemented")
   def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise("Not implemented")
   def dummy_compensation_for_mfa(_effect_to_compensate, _name_and_reason, _opts), do: raise("Not implemented")
   def dummy_final_cb(_status, _opts, _return), do: raise("Not implemented")

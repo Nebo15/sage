@@ -236,6 +236,31 @@ defmodule Sage do
   defguardp is_compensation(value) when is_function(value, 3) or is_mfa(value) or value == :noop
 
   @typedoc """
+  Callback that acquires lock on a resource.
+
+  Returns `{:ok, lock_metadata}` if lock is successfully acquired, `{:error, reason}` if there was an error
+  or `{:abort, reason}` if there was an unrecoverable error. On receiving `{:abort, reason}` Sage will
+  compensate all side effects created so far and ignore all retries.
+
+  Whenever possible, it's recommended to create a timeout-based locks with TTL that exceeds
+  maximum Sage execution time, to have a strong guarantee that resource won't be locked forever.
+  """
+  @type lock_callback :: (opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
+
+  defguardp is_lock(value) when is_function(value, 1) or is_mfa(value)
+
+  @typedoc """
+  Callback that releases a lock acquired on a resource.
+
+  Return is following the same rules as `t.compensation/0` callback.
+  """
+  @type unlock_callback ::
+          (lock :: any(), opts :: any() -> :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
+          | mfa()
+
+  defguardp is_unlock(value) when is_function(value, 2) or is_mfa(value)
+
+  @typedoc """
   Final hook.
 
   It receives `:ok` if all transactions are successfully completed or `:error` otherwise
@@ -254,6 +279,7 @@ defmodule Sage do
   @type t :: %__MODULE__{
           stages: [stage()],
           stage_names: MapSet.t(),
+          lock_names: MapSet.t(),
           final_hooks: MapSet.t(final_hook()),
           on_compensation_error: :raise | module(),
           tracers: MapSet.t(module())
@@ -261,6 +287,7 @@ defmodule Sage do
 
   defstruct stages: [],
             stage_names: MapSet.new(),
+            lock_names: MapSet.new(),
             final_hooks: MapSet.new(),
             on_compensation_error: :raise,
             tracers: MapSet.new()
@@ -338,7 +365,7 @@ defmodule Sage do
   end
 
   @doc """
-  Appends sage with a transaction and function to compensate it's effect.
+  Appends Sage with a synchronous transaction and function to compensate it's effect.
 
   Raises `Sage.DuplicateStageError` exception if stage name is duplicated for a given sage.
 
@@ -395,6 +422,58 @@ defmodule Sage do
     do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
+  Appends Sage with a synchronous step that acquires a lock on a resource.
+
+  Implicitly all locks are released at the end of Sage execution if they weren't explicitly
+  released via `unlock/2` or `unlock_all/1`.
+
+  Raises `Sage.DuplicateStageError` exception if stage name is duplicated for a given sage.
+
+  ### Callbacks
+
+  See `t:lock_callback/0` and `t:unlock_callback/0`.
+  """
+  @spec lock(sage :: t(), lock_name :: stage_name(), lock_cb :: lock_callback(), unlock_cb :: unlock_callback()) :: t()
+  def lock(%Sage{} = sage, lock_name, lock_cb, unlock_cb) when is_atom(lock_name),
+    do: add_lock_stage(sage, lock_name, lock_cb, unlock_cb)
+
+  @doc """
+  Appends Sage with a synchronous step that explicitly releases a lock on a resource
+  acquired by a step added with `lock/4`.
+
+  Raises `Sage.LockNotFoundError` when trying to release a lock which is not found in sage.
+  Raises `Sage.AlreadyUnlockedError` when trying to release a lock which is already explicitly unlocked.
+  """
+  @spec unlock(sage :: t(), lock_name :: stage_name()) :: t()
+  def unlock(%Sage{} = sage, lock_name) when is_atom(lock_name) do
+    %{stage_names: stage_names, lock_names: lock_names} = sage
+    lock_exists? = MapSet.member?(stage_names, lock_name)
+    lock_acquired? = MapSet.member?(lock_names, lock_name)
+
+    cond do
+      lock_exists? && lock_acquired? ->
+        add_unlock_stage(sage, lock_name)
+
+      lock_exists? ->
+        raise Sage.AlreadyUnlockedError, sage: sage, name: lock_name
+
+      true ->
+        raise Sage.LockNotFoundError, sage: sage, name: lock_name
+    end
+  end
+
+  @doc """
+  Appends Sage with a synchronous step to explicitly release all unreleased locks acquired by `lock/4`.
+
+  For more details see `unlock/2`.
+  """
+  def unlock_all(%Sage{} = sage) do
+    sage.lock_names
+    |> MapSet.to_list()
+    |> Enum.reduce(sage, &add_unlock_stage(&2, &1))
+  end
+
+  @doc """
   Executes a Sage.
 
   Optionally, you can pass global options in `opts`, that will be sent to
@@ -443,17 +522,40 @@ defmodule Sage do
   end
 
   defp add_stage(sage, name, operation) do
-    %{stages: stages, stage_names: names} = sage
+    %{stages: stages, stage_names: stage_names} = sage
 
-    if MapSet.member?(names, name) do
+    if MapSet.member?(stage_names, name) do
       raise Sage.DuplicateStageError, sage: sage, name: name
     else
       %{
         sage
         | stages: [{name, operation} | stages],
-          stage_names: MapSet.put(names, name)
+          stage_names: MapSet.put(stage_names, name)
       }
     end
+  end
+
+  defp add_lock_stage(sage, lock_name, lock_cb, unlock_cb) do
+    %{stages: stages, stage_names: stage_names, lock_names: lock_names} = sage
+
+    if MapSet.member?(stage_names, lock_name) do
+      raise Sage.DuplicateStageError, sage: sage, name: lock_name
+    else
+      %{
+        sage
+        | stages: [{lock_name, build_operation!(:lock, lock_cb, unlock_cb)} | stages],
+          stage_names: MapSet.put(stage_names, lock_name),
+          lock_names: MapSet.put(lock_names, lock_name)
+      }
+    end
+  end
+
+  defp add_unlock_stage(sage, lock_name) do
+    %{
+      sage
+      | stages: [build_operation!(:unlock, lock_name) | sage.stages],
+        lock_names: MapSet.delete(sage.lock_names, lock_name)
+    }
   end
 
   # Inline functions for performance optimization
@@ -465,4 +567,12 @@ defmodule Sage do
   defp build_operation!(:run, transaction, compensation)
        when is_transaction(transaction) and is_compensation(compensation),
        do: {:run, transaction, compensation, []}
+
+  defp build_operation!(:lock, lock_cb, unlock_cb)
+       when is_lock(lock_cb) and is_unlock(unlock_cb),
+       do: {:lock, lock_cb, unlock_cb, []}
+
+  defp build_operation!(:unlock, lock_name)
+       when is_atom(lock_name),
+       do: {:unlock, lock_name}
 end

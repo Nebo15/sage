@@ -182,6 +182,27 @@ defmodule Sage.Fixtures do
     end
   end
 
+  def lock(resource_name) do
+    test_pid = self()
+
+    fn opts ->
+      random_sleep()
+      EffectsAgent.push_effect!(:"lock_#{resource_name}", test_pid)
+      send(test_pid, {:locked, resource_name})
+      {:ok, resource_name}
+    end
+  end
+
+  def unlock(resource_name \\ nil) do
+    test_pid = self()
+
+    fn locked_resource_name, _opts ->
+      random_sleep()
+      EffectsAgent.pop_effect!(resource_name || locked_resource_name, test_pid)
+      :ok
+    end
+  end
+
   defp random_sleep do
     1..@max_random_sleep_timeout
     |> Enum.random()
