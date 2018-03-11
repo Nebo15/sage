@@ -76,6 +76,10 @@ defmodule Sage do
   """
   use Application
 
+  defguardp is_mfa(mfa)
+            when is_tuple(mfa) and tuple_size(mfa) == 3 and is_atom(elem(mfa, 0)) and is_atom(elem(mfa, 1)) and
+                   is_list(elem(mfa, 2))
+
   @typedoc """
   Name of Sage execution stage.
   """
@@ -169,6 +173,8 @@ defmodule Sage do
   """
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
+  defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
+
   @typedoc """
   Compensation callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
 
@@ -227,6 +233,8 @@ defmodule Sage do
           | :noop
           | mfa()
 
+  defguardp is_compensation(value) when is_function(value, 3) or is_mfa(value) or value == :noop
+
   @typedoc """
   Final hook.
 
@@ -236,6 +244,8 @@ defmodule Sage do
   Return is ignored.
   """
   @type final_hook :: (:ok | :error, execute_opts :: any() -> no_return()) | mfa()
+
+  defguardp is_final_hook(value) when is_function(value, 2) or (is_tuple(value) and tuple_size(value) == 3)
 
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
@@ -281,7 +291,7 @@ defmodule Sage do
   For more information see "Critical Error Handling" in the module doc.
   """
   @spec with_compensation_error_handler(sage :: t(), module :: module()) :: t()
-  def with_compensation_error_handler(%Sage{} = sage, module) do
+  def with_compensation_error_handler(%Sage{} = sage, module) when is_atom(module) do
     %{sage | on_compensation_error: module}
   end
 
@@ -298,15 +308,14 @@ defmodule Sage do
   For more information see `c:Sage.Tracer.handle_event/3`.
   """
   @spec with_tracer(sage :: t(), module :: module()) :: t()
-  def with_tracer(%Sage{} = sage, module) do
-    raise_on_duplicate_tracer!(sage, module)
-    %{sage | tracers: MapSet.put(sage.tracers, module)}
-  end
+  def with_tracer(%Sage{} = sage, module) when is_atom(module) do
+    %{tracers: tracers} = sage
 
-  defp raise_on_duplicate_tracer!(%{tracers: tracers} = sage, module) do
     if MapSet.member?(tracers, module) do
       raise Sage.DuplicateTracerError, sage: sage, module: module
     end
+
+    %{sage | tracers: MapSet.put(tracers, module)}
   end
 
   @doc """
@@ -318,21 +327,14 @@ defmodule Sage do
   For hook specification see `t:final_hook/0`.
   """
   @spec finally(sage :: t(), hook :: final_hook()) :: t()
-  def finally(%Sage{} = sage, hook) when is_function(hook, 2) do
-    raise_on_duplicate_final_hook!(sage, hook)
-    %{sage | final_hooks: MapSet.put(sage.final_hooks, hook)}
-  end
+  def finally(%Sage{} = sage, hook) when is_final_hook(hook) do
+    %{final_hooks: final_hooks} = sage
 
-  def finally(%Sage{} = sage, {module, function, arguments} = mfa)
-      when is_atom(module) and is_atom(function) and is_list(arguments) do
-    raise_on_duplicate_final_hook!(sage, mfa)
-    %{sage | final_hooks: MapSet.put(sage.final_hooks, mfa)}
-  end
-
-  defp raise_on_duplicate_final_hook!(%{final_hooks: final_hooks} = sage, hook) do
     if MapSet.member?(final_hooks, hook) do
       raise Sage.DuplicateFinalHookError, sage: sage, hook: hook
     end
+
+    %{sage | final_hooks: MapSet.put(final_hooks, hook)}
   end
 
   @doc """
@@ -454,6 +456,13 @@ defmodule Sage do
     end
   end
 
-  defp build_operation!(type, transaction, compensation, opts \\ []) when type in [:run, :run_async],
-    do: {type, transaction, compensation, opts}
+  # Inline functions for performance optimization
+  # @compile {:inline, build_operation!: 2, build_operation!: 3, build_operation!: 4}
+  defp build_operation!(:run_async, transaction, compensation, opts)
+       when is_transaction(transaction) and is_compensation(compensation),
+       do: {:run_async, transaction, compensation, opts}
+
+  defp build_operation!(:run, transaction, compensation)
+       when is_transaction(transaction) and is_compensation(compensation),
+       do: {:run, transaction, compensation, []}
 end

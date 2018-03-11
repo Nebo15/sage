@@ -7,7 +7,7 @@ defmodule Sage.Mixfile do
     [
       app: :sage,
       version: @version,
-      elixir: "~> 1.5",
+      elixir: "~> 1.6",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [] ++ Mix.compilers(),
       build_embedded: Mix.env() == :prod,

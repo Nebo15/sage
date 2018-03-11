@@ -29,8 +29,6 @@ matrix:
         - "mix format --check-formatted"
         # Check type safety
         - "mix dialyzer"
-    - otp_release: 19.3
-      elixir: 1.5.3
 script:
   # Run all tests except pending ones
   - "mix test --exclude pending --trace"
