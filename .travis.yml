@@ -3,6 +3,7 @@ cache:
   directories:
   - deps
   - _build/test
+  - _build/dev
 elixir:
   - 1.6.3
 otp_release:
@@ -14,9 +15,16 @@ matrix:
   include:
     - otp_release: 20.2
       elixir: 1.6.3
+      after_script:
+        # Submit docs coverage to Inch CI
+        - "mix inch.report"
+        # Submit code coverage report to Coveralls
+        - "mix coveralls.travis"
+    - otp_release: 20.2
+      elixir: 1.6.3
+      env:
+        - MIX_ENV=dev
       script:
-        # Run all tests except pending ones
-        - "mix test --exclude pending --trace"
         # Make sure code is formatted
         - "mix format --check-formatted"
         # Check type safety
@@ -27,7 +35,4 @@ script:
   # Run all tests except pending ones
   - "mix test --exclude pending --trace"
 after_script:
-  # Submit docs coverage to Inch CI
-  - "mix inch.report"
-  # Submit code coverage report to Coveralls
-  - "mix coveralls.travis"
+# Keep it empty in order for matrix override to work
