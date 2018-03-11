@@ -220,7 +220,7 @@ defmodule Sage do
   > source: https://docs.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction
   """
   @type compensation ::
-          (effect_to_compensate() :: any(),
+          (effect_to_compensate :: any(),
            {failed_stage_name :: stage_name(), failed_value :: any()},
            execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
