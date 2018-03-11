@@ -77,8 +77,8 @@ defmodule Sage do
   use Application
 
   defguardp is_mfa(mfa)
-            when is_tuple(mfa) and tuple_size(mfa) == 3 and is_atom(elem(mfa, 0)) and is_atom(elem(mfa, 1)) and
-                   is_list(elem(mfa, 2))
+            when is_tuple(mfa) and tuple_size(mfa) == 3 and
+                   (is_atom(elem(mfa, 0)) and is_atom(elem(mfa, 1)) and is_list(elem(mfa, 2)))
 
   @typedoc """
   Name of Sage execution stage.
