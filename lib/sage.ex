@@ -164,12 +164,13 @@ defmodule Sage do
   or `{:abort, reason}` if there was an unrecoverable error. On receiving `{:abort, reason}` Sage will
   compensate all side effects created so far and ignore all retries.
 
-  `Sage.MalformedTransactionReturnError` is raised if callback returns malformed result.
+  `Sage.MalformedTransactionReturnError` is raised after compensating all effects if callback returned malformed result.
 
   ## Transaction guidelines
 
-  Transaction function should be as idempotent as possible, since it is possible that compensation would
-  retry the failed operation after compensating created side effects.
+  You should try to make your transactions idempotent, which makes possible to retry if compensating
+  transaction itself fails. According a modern HTTP semantics, the `PUT` and `DELETE` verbs are idempotent.
+  Also, some services [support idempotent requests via `idempotency keys`](https://stripe.com/blog/idempotency).
   """
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
@@ -180,7 +181,8 @@ defmodule Sage do
 
   Receives:
 
-     * effect created by transaction it's responsible for or `nil` in case effect can not be captured;
+     * effect created by transaction it's responsible for or `nil` in case effect is not known due to an error;
+     * effects created by preceding executed transactions;
      * `{stage_name, reason}` tuple with failed transaction name and it's failure reason;
      * options passed to `execute/2` function.
 
@@ -202,6 +204,10 @@ defmodule Sage do
   and `Sage.UnexpectedCircuitBreakError` is raised. It's the developer responsibility to match operation name
   and failed operation name.
 
+  The circuit breaker should use data which is local to the sage execution, preferably from list of options
+  which are set via `execute/2` 2nd argument. This would guarantee that circuit breaker would not fail when
+  responses cache is not available.
+
   ## Retries
 
   After receiving a `{:retry, [retry_limit: limit]}` Sage will retry the transaction on a stage where retry was
@@ -213,27 +219,32 @@ defmodule Sage do
   ## Compensation guidelines
 
   General rule is that irrespectively to what compensate wants to return, **effect must be always compensated**.
-  No matter what, it should not create other effects. For circuit breaker always use data that already exists,
-  preferably by passing it in opts to the `execute/2`.
+  No matter what, side effects must not be created from compensating transaction.
 
-  > You should define the steps in a compensating transaction as idempotent commands.
-  > This enables the steps to be repeated if the compensating transaction itself fails.
-  >
   > A compensating transaction doesn't necessarily return the data in the system to the state
   > it was in at the start of the original operation. Instead, it compensates for the work
   > performed by the steps that completed successfully before the operation failed.
   >
   > source: https://docs.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction
+
+  You should try to make your compensations idempotent, which makes possible to retry if compensating
+  transaction itself fails. According a modern HTTP semantics, the `PUT` and `DELETE` verbs are idempotent.
+  Also, some services [support idempotent requests via `idempotency keys`](https://stripe.com/blog/idempotency).
+
+  Compensation transactions should not rely on effects created by preceding executed transactions, otherwise
+  it will be more likely that your code is not idempotent and harder to maintain. Use them only as a last
+  resort.
   """
   @type compensation ::
           (effect_to_compensate :: any(),
+           effects_so_far :: effects(),
            {failed_stage_name :: stage_name(), failed_value :: any()},
            execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
           | mfa()
 
-  defguardp is_compensation(value) when is_function(value, 3) or is_mfa(value) or value == :noop
+  defguardp is_compensation(value) when is_function(value, 4) or is_mfa(value) or value == :noop
 
   @typedoc """
   Final hook.

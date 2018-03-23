@@ -77,7 +77,7 @@ defmodule Sage.Executor do
       {:ok, result} ->
         {name, result}
 
-      {:exit, {{:nocatch, reason}, _stacktract}} ->
+      {:exit, {{:nocatch, reason}, _stacktrace}} ->
         {name, {:throw, reason}}
 
       {:exit, {exception, stacktrace}} ->
@@ -255,17 +255,17 @@ defmodule Sage.Executor do
   end
 
   defp execute_compensation({{name, {_type, _transaction, compensation, _tx_opts} = operation}, state}, opts) do
-    {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
+    {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
     tracers = maybe_notify_tracers(tracers, :start_compensation, name)
-    return = safe_apply_compensation_fun(compensation, effect_to_compensate, {failed_name, failed_reason}, opts)
+    return = safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts)
     tracers = maybe_notify_tracers(tracers, :finish_compensation, name)
-    state = {{failed_name, failed_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+    state = {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {name, operation, return, effect_to_compensate, state}
   end
 
-  defp safe_apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts) do
-    apply_compensation_fun(compensation, effect_to_compensate, name_and_reason, opts)
+  defp safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts) do
+    apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts)
   rescue
     exception -> {:raise, {exception, System.stacktrace()}}
   catch
@@ -289,11 +289,11 @@ defmodule Sage.Executor do
       {:raise, {exception_struct, System.stacktrace()}}
   end
 
-  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, {name, reason}, opts),
-    do: apply(mod, fun, [effect_to_compensate, {name, reason}, opts | args])
+  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, {name, reason}, opts),
+    do: apply(mod, fun, [effect_to_compensate, effects_so_far, {name, reason}, opts | args])
 
-  defp apply_compensation_fun(fun, effect_to_compensate, {name, reason}, opts),
-    do: apply(fun, [effect_to_compensate, {name, reason}, opts])
+  defp apply_compensation_fun(fun, effect_to_compensate, effects_so_far, {name, reason}, opts),
+    do: apply(fun, [effect_to_compensate, effects_so_far, {name, reason}, opts])
 
   defp handle_compensation_result({name, operation, :ok, _compensated_effect, state}) do
     {:next_compensation, {name, operation}, state}

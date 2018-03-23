@@ -132,10 +132,10 @@ defmodule Sage.ExecutorTest do
       {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
 
-      cmp = fn effect_to_compensate, name_and_reason, opts ->
+      cmp = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
         assert name_and_reason == {:step3, :t3}
         send(test_pid, {:compensate, effect_to_compensate})
-        not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
+        not_strict_compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
       end
 
       result =
@@ -158,9 +158,9 @@ defmodule Sage.ExecutorTest do
       {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()
 
-      cmp = fn effect_to_compensate, name_and_reason, opts ->
+      cmp = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
         send(test_pid, {:compensate, effect_to_compensate})
-        not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
+        not_strict_compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
       end
 
       result =
@@ -204,9 +204,9 @@ defmodule Sage.ExecutorTest do
     test "with preserved error name and reason for asynchronous transactions" do
       {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
 
-      cmp = fn effect_to_compensate, name_and_reason, opts ->
+      cmp = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
         assert name_and_reason == {:step2, :t2}
-        not_strict_compensation().(effect_to_compensate, name_and_reason, opts)
+        not_strict_compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
       end
 
       result =
@@ -585,7 +585,7 @@ defmodule Sage.ExecutorTest do
       tx.(effects_so_far, opts)
     end
 
-    error_prone_compensation = fn _effect_to_compensate, _name_and_reason, _opts ->
+    error_prone_compensation = fn _effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       :unknown_module.call(:arg)
 
       :ok
@@ -657,7 +657,7 @@ defmodule Sage.ExecutorTest do
   end
 
   describe "compensation error handler" do
-    test "can resume compensation of effects on exception" do
+    test "can resume compensation on exception" do
       {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
@@ -686,7 +686,7 @@ defmodule Sage.ExecutorTest do
       hook_assertion.()
     end
 
-    test "can resume compensation of effects on exit" do
+    test "can resume compensation on exit" do
       {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
@@ -715,7 +715,7 @@ defmodule Sage.ExecutorTest do
       hook_assertion.()
     end
 
-    test "can resume compensation of effects on throw" do
+    test "can resume compensation on throw" do
       {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
@@ -744,7 +744,7 @@ defmodule Sage.ExecutorTest do
       hook_assertion.()
     end
 
-    test "can resume compensation of effects on malformed return" do
+    test "can resume compensation on malformed return" do
       {hook, hook_assertion} = final_hook_with_assertion(:error)
       test_pid = self()
       tx = transaction(:t3)
@@ -772,6 +772,33 @@ defmodule Sage.ExecutorTest do
 
       hook_assertion.()
     end
+  end
+
+  test "compensation receives effects so far" do
+    cmp1 = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
+      assert effects_so_far == %{}
+      not_strict_compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
+    end
+
+    cmp2 = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
+      assert effects_so_far == %{step1: :t1}
+      not_strict_compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
+    end
+
+    cmp3 = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
+      assert effects_so_far == %{step1: :t1, step2: :t2}
+      compensation().(effect_to_compensate, effects_so_far, name_and_reason, opts)
+    end
+
+    result =
+      new()
+      |> run_async(:step1, transaction(:t1), cmp1)
+      |> run_async(:step2, transaction(:t2), cmp2)
+      |> run(:step3, transaction_with_error(:t3), cmp3)
+      |> execute(a: :b)
+
+    assert_no_effects()
+    assert result == {:error, :t3}
   end
 
   describe "tracers" do
@@ -925,10 +952,10 @@ defmodule Sage.ExecutorTest do
     test "are sent to compensation" do
       execute_opts = %{foo: "bar"}
 
-      cmp = fn effect_to_compensate, name_and_reason, opts ->
+      cmp = fn effect_to_compensate, effects_so_far, name_and_reason, opts ->
         assert opts == execute_opts
         assert name_and_reason == {:step1, :t1}
-        compensation(:t1).(effect_to_compensate, name_and_reason, opts)
+        compensation(:t1).(effect_to_compensate, effects_so_far, name_and_reason, opts)
       end
 
       result =
@@ -1119,8 +1146,8 @@ defmodule Sage.ExecutorTest do
 
   def mfa_transaction(effects_so_far, opts, cb), do: cb.(effects_so_far, opts)
 
-  def mfa_compensation(effect_to_compensate, name_and_reason, opts, cb),
-    do: cb.(effect_to_compensate, name_and_reason, opts)
+  def mfa_compensation(effect_to_compensate, effects_so_far, name_and_reason, opts, cb),
+    do: cb.(effect_to_compensate, effects_so_far, name_and_reason, opts)
 
   def final_hook_with_raise(status, _opts, test_pid) do
     send(test_pid, status)

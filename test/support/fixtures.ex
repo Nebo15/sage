@@ -104,7 +104,7 @@ defmodule Sage.Fixtures do
   def compensation(effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       :ok
@@ -112,21 +112,21 @@ defmodule Sage.Fixtures do
   end
 
   def compensation_with_exception(effect \\ nil) do
-    fn _effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       raise "error while compensating #{to_string(effect)}"
     end
   end
 
   def compensation_with_throw(effect \\ nil) do
-    fn _effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       throw("error while compensating #{to_string(effect)}")
     end
   end
 
   def compensation_with_exit(effect \\ nil) do
-    fn _effect_to_compensate, _name_and_reason, _opts ->
+    fn _effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       exit("error while compensating #{to_string(effect)}")
     end
@@ -135,7 +135,7 @@ defmodule Sage.Fixtures do
   def compensation_with_malformed_return(effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       {:bad_returns, :are_bad_mmmkay}
@@ -145,7 +145,7 @@ defmodule Sage.Fixtures do
   def not_strict_compensation(effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.delete_effect!(effect || effect_to_compensate, test_pid)
       :ok
@@ -155,7 +155,7 @@ defmodule Sage.Fixtures do
   def compensation_with_retry(limit, effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       {:retry, [retry_limit: limit]}
@@ -165,7 +165,7 @@ defmodule Sage.Fixtures do
   def compensation_with_abort(effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.pop_effect!(effect || effect_to_compensate, test_pid)
       :abort
@@ -175,7 +175,7 @@ defmodule Sage.Fixtures do
   def compensation_with_circuit_breaker(effect \\ nil) do
     test_pid = self()
 
-    fn effect_to_compensate, _name_and_reason, _opts ->
+    fn effect_to_compensate, _effects_so_far, _name_and_reason, _opts ->
       random_sleep()
       EffectsAgent.pop_effect!(effect_to_compensate, test_pid)
       {:continue, effect || :"#{effect_to_compensate}_from_cache"}
