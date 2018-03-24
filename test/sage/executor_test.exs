@@ -101,7 +101,7 @@ defmodule Sage.ExecutorTest do
     Logger.metadata(metadata)
 
     tx = fn effects_so_far, opts ->
-      send test_pid, {:logger_metadata, Logger.metadata()}
+      send(test_pid, {:logger_metadata, Logger.metadata()})
       transaction(:t1).(effects_so_far, opts)
     end
 
