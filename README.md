@@ -200,8 +200,9 @@ Testing is easier, because instead of one monstrous function you will have many 
 with unit tests. You only need to tests business logic in transactions and that compensations are able to cleanup their
 effects. The Sage itself has 100% test coverage.
 
-Even more, it is possible to apply a new kind of architecture in an Elixir project, where Phoenix context
-(or just application domains) are providing helper functions for building sagas to a controller, which used one or more of them to have each request side-effects free. Simplified example:
+Even more, it is possible to apply a new kind of architecture in an Elixir project where Phoenix contexts
+(or just application domains) are providing helper functions for building sagas to a controller, which then
+uses one or more of them to make sure that each request is side-effects free. Simplified example:
 
 ```elixir
 defmodule SageExample.UserController do
