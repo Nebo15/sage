@@ -192,9 +192,32 @@ end
 Along with a readable code, you are getting:
 
 - Reasonable guarantees that all transaction steps are completed or all failed steps are compensated;
-- Code which is much simpler and easier to test a code - you only need to test transaction and compensation callback separately, the Sage itself has 100% test coverage;
+- Code which is much simpler and easier to test a code;
 - Retries, circuit breaking and asynchronous requests our of the box;
 - Declarative way to define your transactions and run them.
+
+Testing is easier, because instead of one monstrous function you will have many small callbacks which are easy to cover
+with unit tests. You only need to tests business logic in transactions and that compensations are able to cleanup their
+effects. The Sage itself has 100% test coverage.
+
+Even more, it is possible to apply a new kind of architecture in an Elixir project, where Phoenix context
+(or just application domains) are providing helper functions for building sagas to a controller, which used one or more of them to have each request side-effects free. Simplified example:
+
+```elixir
+defmodule SageExample.UserController do
+  use SageExample.Web, :controller
+
+  action_fallback SageExample.FallbackController
+
+  def signup_and_accept_team_invitation(conn, attrs) do
+    Sage.new()
+    |> SageExample.Users.Sagas.create_user()
+    |> SageExample.Teams.Sagas.accept_invitation()
+    |> SageExample.Billing.Sagas.prorate_team_size()
+    |> Sage.execute(attrs)
+  end
+end
+```
 
 ## Execution Guarantees and Edge Cases
 
