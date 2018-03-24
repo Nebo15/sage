@@ -143,8 +143,10 @@ defmodule Sage.Executor do
   end
 
   defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, effects_so_far, opts) do
+    logger_metadata = Logger.metadata()
     task =
       Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
+        Logger.metadata(logger_metadata)
         apply_transaction_fun(transaction, effects_so_far, opts)
       end)
 

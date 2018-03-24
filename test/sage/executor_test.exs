@@ -95,6 +95,25 @@ defmodule Sage.ExecutorTest do
     hook_assertion.()
   end
 
+  test "asynchronous transactions process metadata is copied from parent process" do
+    test_pid = self()
+    metadata = [test_pid: test_pid, test_ref: make_ref()]
+    Logger.metadata(metadata)
+
+    tx = fn effects_so_far, opts ->
+      send test_pid, {:logger_metadata, Logger.metadata()}
+      transaction(:t1).(effects_so_far, opts)
+    end
+
+    result =
+      new()
+      |> run_async(:step1, tx, not_strict_compensation())
+      |> execute()
+
+    assert result == {:ok, :t1, %{step1: :t1}}
+    assert_receive {:logger_metadata, ^metadata}
+  end
+
   describe "effects are compensated" do
     test "when transaction fails" do
       {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
