@@ -40,18 +40,20 @@ Along with that simple idea, you will get much more out of the box with Sage:
 
 ## Rationale (use cases)
 
-Lot's of applications I've seen face a common task - interaction with third-party API's to offload some the work on SaaS products or micro-services.
+Lot's of applications I've seen face a common task - interaction with third-party API's to offload some the work on
+SaaS products or micro-services, when you simply need to commit to more than one database or in all other cases where
+you don't have transaction isolation between business logic steps (that we all got used to thanks to RDBMS).
 
-Sometimes you simply need to interact with more than one database.
+When dealing with those, it is a common desire to handle all sorts of errors when application code has failed
+in the middle of a transaction so that you won't leave databases in an inconsistent state.
 
-The case when you can't get a proper transaction isolation (that we all got used to thanks to RDBMS).
-You'll need to clean up all side effects to not leave a database in an inconsistent state, when
-application code has failed in the middle of a transaction.
+### Using `with` (the old way)
 
-Consider following pseudo-code (don't do this):
+One of solutions is to write a business logic using `with` syntax. But when number of transaction steps grow,
+code becomes hard to maintain, test and even looks ugly. Consider following pseudo-code (don't do this):
 
 ```elixir
-defmodule WithSagas do
+defmodule WithExample do
   def create_and_subscribe_user(attrs) do
     Repo.transaction(fn ->
       with {:ok, user} <- create_user(attrs),
@@ -102,36 +104,96 @@ Along with the issues highlighted in the code itself, there are few more:
 
 1. To know at which stage we failed we need to keep an eye on the special returns from the functions we're using here;
 2. Hard to control that there is a condition to compensate for all possible error cases;
-3. Does not cover retries, async operations or circuit breaker;
-4. Can not keep things together, because `with` returns are not available in the `else` block;
-5. No error handling in the case our code has bugs;
-5. Hard to test.
+3. Impossible not keep relative code close to each other, because bare expressions in `with`do not leak to the `else` block;
+4. Hard to test;
+5. Hard to improve, eg. it is hard to add retries, async operations or circuit breaker without making it even worse.
 
-Of course, you can manage that by splitting `create_and_subscribe_user/1`, but the resulting code would be significantly larger and would be much harder to maintain.
+For some time you might get away by splitting `create_and_subscribe_user/1`, but it only works while number of transactions is very small.
+
+### Using Sagas
 
 Instead, let's see how that pipeline would look with `Sage`:
 
 ```elixir
-import Sage
+defmodule SageExample do
+  import Sage
+  require Logger
 
-new()
-|> run(:user, &create_user/2)
-|> run(:plans, &fetch_subscription_plans/2)
-|> Sage.Experimental.checkpoint(retry_limit: 3) # If one of the next transactions fails, retry them 3 times max
-|> run(:subscription, &create_subscription/2, &delete_subscription/3)
-|> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
-|> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
-|> run(:update_user, &set_plan_for_a_user/2)
-|> finally(&acknowledge_job/2)
-|> to_function(attrs)
-|> Repo.transaction()
+  @spec create_and_subscribe_user(attrs :: map()) :: {:ok, last_effect :: any(), all_effects :: map()} | {:error, reason :: any()}
+  def create_and_subscribe_user(attrs) do
+    new()
+    |> run(:user, &create_user/2)
+    |> run(:plans, &fetch_subscription_plans/2, &subscription_plans_circuit_breaker/4)
+    |> run(:subscription, &create_subscription/2, &delete_subscription/4)
+    |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/4)
+    |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/4)
+    |> run(:update_user, &set_plan_for_a_user/2)
+    |> finally(&acknowledge_job/2)
+    |> transaction(SageExample.Repo, attrs)
+  end
+
+  # Transaction behaviour:
+  # @callback transaction(attrs :: map()) :: {:ok, last_effect :: any(), all_effects :: map()} | {:error, reason :: any()}
+
+  # Compensation behaviour:
+  # @callback compensation(
+  #             effect_to_compensate :: any(),
+  #             effects_so_far :: map(),
+  #             {failed_stage_name :: atom(), failed_value :: any()},
+  #             attrs :: any()
+  #           ) :: :ok | :abort | {:retry, retry_opts :: Sage.retry_opts()} | {:continue, any()}
+
+  def create_user(_effects_so_far, %{"user" => user_attrs}) do
+    %SageExample.User{}
+    |> SageExample.User.changeset(user_attrs)
+    |> SageExample.Repo.insert()
+  end
+
+  def fetch_subscription_plans(_effects_so_far, _attrs) do
+    {:ok, _plans} = SageExample.Billing.APIClient.list_plans()
+  end
+
+  # If we failed to fetch plans, let's continue with cached ones
+  def subscription_plans_circuit_breaker(_effect_to_compensate, _effects_so_far, {:plans, _reason}, _attrs) do
+    {:continue, [%{"id" => "free", "total" => 0}, %{"id" => "standard", "total" => 4.99}]}
+  end
+
+  def subscription_plans_circuit_breaker(_effect_to_compensate, _effects_so_far, _name_and_reason, _attrs) do
+    :ok
+  end
+
+  def create_subscription(%{user: user}, %{"subscription" => subscription}) do
+    {:ok, subscription} = SageExample.Billing.APIClient.subscribe_user(user, subscription["plan"])
+  end
+
+  def delete_subscription(_effect_to_compensate, %{user: user}, _name_and_reason, _attrs) do
+    with :ok <- SageExample.Billing.APIClient.delete_all_subscriptions_for_user(user) do
+      # Execution would be retried from :subscription stage for 5 times
+      {:retry, retry_limit: 5, base_backoff: 10, max_backoff: 30_000, enable_jitter: true}
+    else
+      other ->
+        Logger.error("Failed to delete subscription, expected to return :ok, got: #{inspect(other)}. Sage is aborted")
+        :abort
+    end
+  end
+
+  # .. other transaction and compensation callbacks
+
+  def acknowledge_job(:ok, attrs) do
+    Logger.info("Successfully created user #{attrs["user"]["email"]}")
+  end
+
+  def acknowledge_job(_error, attrs) do
+    Logger.warn("Failed to create user #{attrs["user"]["email"]}")
+  end
+end
 ```
 
-Along with more readable code, you are getting:
+Along with a readable code, you are getting:
 
-- Guarantees that all transaction steps are completed or all failed steps are compensated;
-- Much simpler and easier to test a code of a transaction and compensation functions implementations;
-- Retries, circuit breaking and asynchronous requests;
+- Reasonable guarantees that all transaction steps are completed or all failed steps are compensated;
+- Code which is much simpler and easier to test a code - you only need to test transaction and compensation callback separately, the Sage itself has 100% test coverage;
+- Retries, circuit breaking and asynchronous requests our of the box;
 - Declarative way to define your transactions and run them.
 
 ## Execution Guarantees and Edge Cases
@@ -176,7 +238,7 @@ By default, compensations are not protected from critical errors and would raise
 This is done to keep simplicity and follow "let it fall" pattern of the language,
 thinking that this kind of errors should be logged and then manually investigated by a developer.
 
-But if that's not enough for you, it is possible to register handler via `on_compensation_error/2`.
+But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
 When it's registered, compensations are wrapped in a `try..catch` block
 and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
@@ -243,7 +305,7 @@ The package can be installed by adding [`sage`](https://hex.pm/packages/sage) to
 ```elixir
 def deps do
   [
-    {:sage, "~> 0.3.3"}
+    {:sage, "~> 0.4.0"}
   ]
 end
 ```

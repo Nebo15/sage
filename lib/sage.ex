@@ -1,19 +1,23 @@
 defmodule Sage do
   @moduledoc ~S"""
-  Sage is an implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern
-  in pure Elixir.
+  Sage is a dependency-free implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf)
+  pattern in pure Elixir. It is a go to way when you dealing with distributed transactions, especially with
+  an error recovery/cleanup. Sage does it's best to guarantee that either all of the transactions in a saga are
+  successfully completed or compensating that all of the transactions did run to amend a partial execution.
 
-  It is go to way when you dealing with distributed transactions, especially with
-  an error recovery/cleanup. Sagas guarantees that either all the transactions in a saga are
-  successfully completed or compensating transactions are run to amend a partial execution.
+  This is done by defining two way flow with transaction and compensation functions. When one of the transactions
+  fails, Sage will ensure that transaction's and all of it's predecessors compensations are executed. However,
+  it's important to note that Sage can not protect you from a node failure that executes given Sage.
 
   ## Critical Error Handling
 
   ### For Transactions
 
   Transactions are wrapped in a `try..catch` block.
-  Whenever a critical error occurs Sage will run all compensations and then return exactly
-  the same error, so you would see it like it occurred without Sage.
+
+  Whenever a critical error occurs (exception is raised, error thrown or exit signal is received)
+  Sage will run all compensations and then reraise the exception with the same stacktrace,
+  so your log would look like it occurred without using a Sage.
 
   ### For Compensations
 
@@ -23,56 +27,30 @@ defmodule Sage do
 
   But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
   When it's registered, compensations are wrapped in a `try..catch` block
-  and then it's error handler responsibility to take care about further actions.
+  and then it's error handler responsibility to take care about further actions. Few solutions you might want to try:
 
-  Logging for compensation errors is verbose to drive the attention to the problem from system maintainers.
+  - Send notification to a Slack channel about need of manual resolution;
+  - Retry compensation;
+  - Spawn a new supervised process that would retry compensation and return an error in the Sage.
+  (Useful when you have connection issues that would be resolved at some point in future.)
 
-  ## Examples
+  Logging for compensation errors is pretty verbose to drive the attention to the problem from system maintainers.
 
-      def my_sage do
-        import Sage
+  ## `finally/2` hook
 
-        new()
-        |> run(:user, &create_user/2, &delete_user/3)
-        |> run(:plans, &fetch_subscription_plans/3)
-        |> run(:subscription, &create_subscription/2, delete_subscription/3)
-        |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
-        |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
-        |> run(:update_user, &set_plan_for_a_user/2, &rollback_plan_for_a_user/3)
-        |> finally(&acknowledge_job/2)
-      end
+  Sage does it's best to make sure final callback is executed even if there is a program bug in the code.
+  This guarantee simplifies integration with a job processing queues, you can read more about it at
+  [GenTask Readme](https://github.com/Nebo15/gen_task).
 
-      my_sage()
-      |> execute([pool: Poolboy.start_link(), user_attrs: %{"email" => "foo@bar.com"}])
-      |> case do
-        {:ok, success, _effects} ->
-          {:ok, success}
+  If an error is raised within `finally/2` hook, it's getting logged and ignored. Follow the simple rule - everything
+  that is on your critical path should be a Sage transaction.
 
-        {:error, reason} ->
-          Logger.error("Failed to execute with reason #{inspect(reason)}")
-          {:error, reason}
-      end
+  ## Tracing and measuring Sage execution steps
 
-  Wrapping Sage in a transaction:
+  Sage allows you to set a tracer module which is called on each step of the execution flow (before and after
+  transactions and/or compensations). It could be used to report metrics on the execution flow.
 
-      # In this sage we don't need `&delete_user/2` and `&rollback_plan_for_a_user/3`,
-      # everything is rolled back as part of DB transaction
-      def my_db_aware_sage do
-        import Sage
-
-        new()
-        |> run(:user, &create_user/2)
-        |> run(:plans, &fetch_subscription_plans/3)
-        |> run(:subscription, &create_subscription/2, delete_subscription/3)
-        |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/3)
-        |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/3)
-        |> run(:update_user, &set_plan_for_a_user/2)
-        |> finally(&acknowledge_job/2)
-      end
-
-      my_db_aware_sage()
-      |> Sage.to_function(execute_opts)
-      |> Repo.transaction()
+  If error is raised within tracing function, it's getting logged and ignored.
   """
   use Application
 
@@ -91,17 +69,16 @@ defmodule Sage do
   @type effects :: map()
 
   @typedoc """
-  Options for asynchronous transactions.
+  Options for asynchronous transaction stages.
   """
   @type async_opts :: [{:timeout, integer() | :infinity}]
 
   @typedoc """
   Retry options.
 
-  Sage internally stores count of retries for whole Sage execution,
-  the value is shared across all compensations so it is possible to retry
-  with on various options, but with making sure that transactions won't be
-  retried infinitely.
+  Retry count for all a sage execution is shared and stored internally,
+  so even trough you can increase retry limit - retry count would be
+  never reset to make sure that execution would not be retried infinitely.
 
   Available retry options:
     * `:retry_limit` - is the maximum number of possible retry attempts;
@@ -109,7 +86,7 @@ defmodule Sage do
     * `:max_backoff` - is the maximum backoff value, default: `5_000` ms.;
     * `:enable_jitter` - whatever jitter is applied to backoff value, default: `true`;
 
-  Sage will log and ignore if options are invalid.
+  Sage will log and give up retrying if options are invalid.
 
   ## Backoff calculation
 
@@ -289,7 +266,7 @@ defmodule Sage do
   end
 
   @doc """
-  Creates a new sage.
+  Creates a new Sage.
   """
   @spec new() :: t()
   def new, do: %Sage{}
@@ -411,7 +388,8 @@ defmodule Sage do
   Optionally, you can pass global options in `opts`, that will be sent to
   all transaction, compensation functions and hooks. It is especially useful when
   you want to have keep sage definitions declarative and execute them with
-  different arguments (eg. by building it in the module attribute).
+  different arguments (eg. you may build your Sage struct in a module attribute,
+  because there is no need to repeat this work for each execution).
 
   If there was an exception, throw or exit in one of transaction functions,
   Sage will reraise it after compensating all effects.
