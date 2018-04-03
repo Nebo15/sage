@@ -11,6 +11,48 @@ defmodule Sage.EmptyError do
   end
 end
 
+defmodule Sage.LockNotFoundError do
+  @moduledoc """
+  Raised at runtime when a trying to release a lock which is not found in Sage.
+  """
+  defexception [:message]
+
+  @impl true
+  def exception(opts) do
+    sage = Keyword.fetch!(opts, :sage)
+    name = Keyword.fetch!(opts, :name)
+
+    message = """
+    can not release lock #{inspect(name)} because it's not defined in Sage:
+
+      #{inspect(sage)}
+    """
+
+    %__MODULE__{message: message}
+  end
+end
+
+defmodule Sage.AlreadyUnlockedError do
+  @moduledoc """
+  Raised at runtime when a trying to release a lock which was already releases.
+  """
+  defexception [:message]
+
+  @impl true
+  def exception(opts) do
+    sage = Keyword.fetch!(opts, :sage)
+    name = Keyword.fetch!(opts, :name)
+
+    message = """
+    can not release a lock #{inspect(name)} because it's already released in Sage:
+
+      #{inspect(sage)}
+    """
+
+    %__MODULE__{message: message}
+  end
+end
+
 defmodule Sage.UnexpectedCircuitBreakError do
   @moduledoc """
   Raised at runtime when the compensation tries to apply circuit breaker
