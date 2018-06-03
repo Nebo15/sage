@@ -261,14 +261,14 @@ defmodule Sage.Executor do
     {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
     tracers = maybe_notify_tracers(tracers, :start_compensation, name)
-    return = safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts)
+    return = safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
     tracers = maybe_notify_tracers(tracers, :finish_compensation, name)
     state = {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {name, operation, return, effect_to_compensate, state}
   end
 
-  defp safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts) do
-    apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, name_and_reason, opts)
+  defp safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts) do
+    apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
   rescue
     exception -> {:raise, {exception, System.stacktrace()}}
   catch
@@ -292,11 +292,11 @@ defmodule Sage.Executor do
       {:raise, {exception_struct, System.stacktrace()}}
   end
 
-  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, {name, reason}, opts),
-    do: apply(mod, fun, [effect_to_compensate, effects_so_far, {name, reason}, opts | args])
+  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, opts),
+    do: apply(mod, fun, [effect_to_compensate, effects_so_far, opts | args])
 
-  defp apply_compensation_fun(fun, effect_to_compensate, effects_so_far, {name, reason}, opts),
-    do: apply(fun, [effect_to_compensate, effects_so_far, {name, reason}, opts])
+  defp apply_compensation_fun(fun, effect_to_compensate, effects_so_far, opts),
+    do: apply(fun, [effect_to_compensate, effects_so_far, opts])
 
   defp handle_compensation_result({name, operation, :ok, _compensated_effect, state}) do
     {:next_compensation, {name, operation}, state}
@@ -332,10 +332,6 @@ defmodule Sage.Executor do
   end
 
   defp handle_compensation_result({name, operation, {:continue, _effect}, _compensated_effect, state}) do
-    {{return_name, _return_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
-    exception = %Sage.UnexpectedCircuitBreakError{compensation_name: name, failed_transaction_name: return_name}
-    return = {:raise, {exception, System.stacktrace()}}
-    state = {return, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {:next_compensation, {name, operation}, state}
   end
 

@@ -199,6 +199,6 @@ defmodule SageTest do
   end
 
   def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise("Not implemented")
-  def dummy_compensation_for_mfa(_effect_to_compensate, _name_and_reason, _opts), do: raise("Not implemented")
+  def dummy_compensation_for_mfa(_effect_to_compensate, _opts), do: raise("Not implemented")
   def dummy_final_cb(_status, _opts, _return), do: raise("Not implemented")
 end

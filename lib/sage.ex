@@ -160,7 +160,6 @@ defmodule Sage do
 
      * effect created by transaction it's responsible for or `nil` in case effect is not known due to an error;
      * effects created by preceding executed transactions;
-     * `{stage_name, reason}` tuple with failed transaction name and it's failure reason;
      * options passed to `execute/2` function.
 
   Returns:
@@ -177,13 +176,12 @@ defmodule Sage do
   After receiving a circuit breaker response Sage will continue executing transactions by using returned effect.
 
   Circuit breaking is only allowed if compensation function that returns it is responsible for the failed transaction
-  (they both are parts of for the same execution step). Otherwise execution would be aborted
-  and `Sage.UnexpectedCircuitBreakError` is raised. It's the developer responsibility to match operation name
-  and failed operation name.
+  (they both are parts of for the same execution step). Otherwise curcuit breaker would be ignored and Sage will
+  continue applying backward recovery.
 
   The circuit breaker should use data which is local to the sage execution, preferably from list of options
   which are set via `execute/2` 2nd argument. This would guarantee that circuit breaker would not fail when
-  responses cache is not available.
+  response cache is not available.
 
   ## Retries
 
@@ -215,13 +213,12 @@ defmodule Sage do
   @type compensation ::
           (effect_to_compensate :: any(),
            effects_so_far :: effects(),
-           {failed_stage_name :: stage_name(), failed_value :: any()},
            execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
           | mfa()
 
-  defguardp is_compensation(value) when is_function(value, 4) or is_mfa(value) or value == :noop
+  defguardp is_compensation(value) when is_function(value, 3) or is_mfa(value) or value == :noop
 
   @typedoc """
   Final hook.

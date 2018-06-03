@@ -4,7 +4,7 @@ defimpl Inspect, for: Sage do
   @tx_symbol "->"
   @cmp_symbol "<-"
   @tx_args [:effects_so_far, :opts]
-  @cmp_args [:effect_to_compensate, :name_and_reason, :opts]
+  @cmp_args [:effect_to_compensate, :opts]
   @final_hook_args [:name, :state]
 
   def inspect(sage, opts) do

@@ -11,29 +11,6 @@ defmodule Sage.EmptyError do
   end
 end
 
-defmodule Sage.UnexpectedCircuitBreakError do
-  @moduledoc """
-  Raised at runtime when the compensation tries to apply circuit breaker
-  on transactions it's not responsible for.
-  """
-  defexception [:compensation_name, :failed_transaction_name]
-
-  @impl true
-  def message(%__MODULE__{compensation_name: compensation_name, failed_transaction_name: failed_transaction_name}) do
-    """
-    Compensation #{to_string(compensation_name)} tried to apply circuit
-    breaker on a failure which occurred on transaction
-    #{to_string(failed_transaction_name)} which it is not responsible for.
-
-    When implementing circuit breaker, always match for a
-    failed operation name in compensating function. For more details see
-    https://hexdocs.pm/sage/Sage.html#t:compensation/0-circuit-breaker.
-
-    Sage execution is aborted.
-    """
-  end
-end
-
 defmodule Sage.AsyncTransactionTimeoutError do
   @moduledoc """
   Raised at runtime when the asynchronous transaction timed out.

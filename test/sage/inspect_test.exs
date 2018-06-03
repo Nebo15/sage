@@ -31,9 +31,9 @@ defmodule Sage.InspectTest do
           step5: -> Sage.InspectTest.transaction/2
                  <- #{inspect(cmp)},
           step6: -> #{inspect(tx)}
-                 <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
+                 <- Sage.InspectTest.compensation(effect_to_compensate, opts, :foo, :bar),
           step7: -> #{inspect(tx)}
-                 <- Sage.InspectTest.compensation/3
+                 <- Sage.InspectTest.compensation/2
         >
         """
       else
@@ -48,9 +48,9 @@ defmodule Sage.InspectTest do
          step5: -> Sage.InspectTest.transaction/2
                 <- #{inspect(cmp)},
          step6: -> #{inspect(tx)}
-                <- Sage.InspectTest.compensation(effect_to_compensate, name_and_reason, opts, :foo, :bar),
+                <- Sage.InspectTest.compensation(effect_to_compensate, opts, :foo, :bar),
          step7: -> #{inspect(tx)}
-                <- Sage.InspectTest.compensation/3>
+                <- Sage.InspectTest.compensation/2>
         """
       end
 

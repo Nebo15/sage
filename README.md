@@ -154,27 +154,18 @@ defmodule SageExample do
   end
 
   # If we failed to fetch plans, let's continue with cached ones
-  def subscription_plans_circuit_breaker(_effect_to_compensate, _effects_so_far, {:plans, _reason}, _attrs) do
+  def subscription_plans_circuit_breaker(_effect_to_compensate, _effects_so_far, _attrs) do
     {:continue, [%{"id" => "free", "total" => 0}, %{"id" => "standard", "total" => 4.99}]}
-  end
-
-  def subscription_plans_circuit_breaker(_effect_to_compensate, _effects_so_far, _name_and_reason, _attrs) do
-    :ok
   end
 
   def create_subscription(%{user: user}, %{"subscription" => subscription}) do
     {:ok, subscription} = SageExample.Billing.APIClient.subscribe_user(user, subscription["plan"])
   end
 
-  def delete_subscription(_effect_to_compensate, %{user: user}, _name_and_reason, _attrs) do
-    with :ok <- SageExample.Billing.APIClient.delete_all_subscriptions_for_user(user) do
-      # Execution would be retried from :subscription stage for 5 times
-      {:retry, retry_limit: 5, base_backoff: 10, max_backoff: 30_000, enable_jitter: true}
-    else
-      other ->
-        Logger.error("Failed to delete subscription, expected to return :ok, got: #{inspect(other)}. Sage is aborted")
-        :abort
-    end
+  def delete_subscription(_effect_to_compensate, %{user: user}, _attrs) do
+    :ok = SageExample.Billing.APIClient.delete_all_subscriptions_for_user(user)
+    # We want to apply forward compensation from :subscription stage for 5 times
+    {:retry, retry_limit: 5, base_backoff: 10, max_backoff: 30_000, enable_jitter: true}
   end
 
   # .. other transaction and compensation callbacks
