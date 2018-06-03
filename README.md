@@ -2,7 +2,9 @@
 
 [![Deps Status](https://beta.hexfaktor.org/badge/all/github/Nebo15/sage.svg)](https://beta.hexfaktor.org/github/Nebo15/sage) [![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
 
-Sage is a dependency-free implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir. It is a go to way when you dealing with distributed transactions, especially with
+Sage is a dependency-free implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir and provides set of features on top of.
+
+It is a go to way when you dealing with distributed transactions, especially with
 an error recovery/cleanup. Sage does it's best to guarantee that either all of the transactions in a saga are
 successfully completed or compensating that all of the transactions did run to amend a partial execution.
 
@@ -37,6 +39,12 @@ Along with that simple idea, you will get much more out of the box with Sage:
 - Low cost of integration in existing code base and low performance overhead;
 - Ability to not lock the database with long running transactions;
 - Extensibility - write your own handler for critical errors or metric collector to measure how much time each step took.
+
+## Goals
+
+- Become a defacto tool to run distributed transactions in Elixir world;
+- Stay simple to use and small to maintain, less code - less bugs;
+- Educate people how to run distributed transaction pragmatically.
 
 ## Rationale (use cases)
 
@@ -210,6 +218,8 @@ defmodule SageExample.UserController do
   end
 end
 ```
+
+If you want to have more examples check out [blog post on Sage](https://medium.com/nebo-15/introducing-sage-a-sagas-pattern-implementation-in-elixir-3ad499f236f6).
 
 ## Execution Guarantees and Edge Cases
 
