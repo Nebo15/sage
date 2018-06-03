@@ -969,11 +969,10 @@ defmodule Sage.ExecutorTest do
     test "are sent to compensation" do
       execute_opts = %{foo: "bar"}
 
-      cmp =
-        fn effect_to_compensate, effects_so_far, opts ->
-          assert opts == execute_opts
-          compensation(:t1).(effect_to_compensate, effects_so_far, opts)
-        end
+      cmp = fn effect_to_compensate, effects_so_far, opts ->
+        assert opts == execute_opts
+        compensation(:t1).(effect_to_compensate, effects_so_far, opts)
+      end
 
       result =
         new()

@@ -211,9 +211,7 @@ defmodule Sage do
   resort.
   """
   @type compensation ::
-          (effect_to_compensate :: any(),
-           effects_so_far :: effects(),
-           execute_opts :: any() ->
+          (effect_to_compensate :: any(), effects_so_far :: effects(), execute_opts :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
           | mfa()
