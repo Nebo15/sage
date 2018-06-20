@@ -131,8 +131,8 @@ defmodule SageExample do
   def create_and_subscribe_user(attrs) do
     new()
     |> run(:user, &create_user/2)
-    |> run(:plans, &fetch_subscription_plans/2, &subscription_plans_circuit_breaker/4)
-    |> run(:subscription, &create_subscription/2, &delete_subscription/4)
+    |> run(:plans, &fetch_subscription_plans/2, &subscription_plans_circuit_breaker/3)
+    |> run(:subscription, &create_subscription/2, &delete_subscription/3)
     |> run_async(:delivery, &schedule_delivery/2, &delete_delivery_from_schedule/4)
     |> run_async(:receipt, &send_email_receipt/2, &send_excuse_for_email_receipt/4)
     |> run(:update_user, &set_plan_for_a_user/2)
