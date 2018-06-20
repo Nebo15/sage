@@ -219,7 +219,7 @@ defmodule SageExample.UserController do
 end
 ```
 
-If you want to have more examples check out this [blog post on Sage](https://medium.com/nebo-15/introducing-sage-a-sagas-pattern-implementation-in-elixir-3ad499f236f6).
+If you want to have more examples, check out this [blog post on Sage](https://medium.com/nebo-15/introducing-sage-a-sagas-pattern-implementation-in-elixir-3ad499f236f6).
 
 ## Execution Guarantees and Edge Cases
 
