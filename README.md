@@ -2,17 +2,17 @@
 
 [![Deps Status](https://beta.hexfaktor.org/badge/all/github/Nebo15/sage.svg)](https://beta.hexfaktor.org/github/Nebo15/sage) [![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
 
-Sage is a dependency-free implementation of [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir and provides set of features on top of.
+Sage is a dependency-free implementation of the [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir providing an additional set of features built-in.
 
-It is a go to way when you dealing with distributed transactions, especially with
+It is a go-to way for when you are dealing with distributed transactions, especially with
 an error recovery/cleanup. Sage does it's best to guarantee that either all of the transactions in a saga are
-successfully completed or compensating that all of the transactions did run to amend a partial execution.
+successfully completed, or compensating that all of the transactions did run to amend a partial execution.
 
 > It’s like `Ecto.Multi` but across business logic and third-party APIs.
 >
 > -- <cite>@jayjun</cite>
 
-This is done by defining two way flow with transaction and compensation functions. When one of the transactions fails, Sage will ensure that transaction's and all of it's predecessors compensations are executed. However, it's important to note that Sage can not protect you from a node failure that executes given Sage.
+This is done by defining two way flow with transaction and compensation functions. When one of the transactions fails, Sage will ensure that the transaction's and all of its predecessors' compensations are executed. However, it's important to note that Sage can not protect you from a node failure that executes given Sage.
 
 To visualize it, let's imagine we have a 4-step transaction. Successful execution flow would look like:
 ```
@@ -42,13 +42,13 @@ Along with that simple idea, you will get much more out of the box with Sage:
 
 ## Goals
 
-- Become a defacto tool to run distributed transactions in Elixir world;
-- Stay simple to use and small to maintain, less code - less bugs;
+- Become a de facto tool to run distributed transactions in the Elixir world;
+- Stay simple to use and small to maintain: less code - less bugs;
 - Educate people how to run distributed transaction pragmatically.
 
 ## Rationale (use cases)
 
-Lot's of applications I've seen face a common task - interaction with third-party API's to offload some the work on
+Lot's of applications I've seen face a common task - interaction with third-party API's to offload some of the work on
 SaaS products or micro-services, when you simply need to commit to more than one database or in all other cases where
 you don't have transaction isolation between business logic steps (that we all got used to thanks to RDBMS).
 
@@ -57,8 +57,8 @@ in the middle of a transaction so that you won't leave databases in an inconsist
 
 ### Using `with` (the old way)
 
-One of solutions is to write a business logic using `with` syntax. But when number of transaction steps grow,
-code becomes hard to maintain, test and even looks ugly. Consider following pseudo-code (don't do this):
+One solution is to write business logic using `with` syntax. But when the number of transaction steps grow,
+code becomes hard to maintain, test and even looks ugly. Consider the following pseudo-code __(don't do this)__:
 
 ```elixir
 defmodule WithExample do
@@ -112,11 +112,11 @@ Along with the issues highlighted in the code itself, there are few more:
 
 1. To know at which stage we failed we need to keep an eye on the special returns from the functions we're using here;
 2. Hard to control that there is a condition to compensate for all possible error cases;
-3. Impossible not keep relative code close to each other, because bare expressions in `with`do not leak to the `else` block;
+3. Impossible to not keep relative code close to each other, because bare expressions in `with`do not leak to the `else` block;
 4. Hard to test;
 5. Hard to improve, eg. it is hard to add retries, async operations or circuit breaker without making it even worse.
 
-For some time you might get away by splitting `create_and_subscribe_user/1`, but it only works while number of transactions is very small.
+For some time you might get away by splitting `create_and_subscribe_user/1`, but it only works while the number of transactions is very small.
 
 ### Using Sagas
 
@@ -196,8 +196,8 @@ Along with a readable code, you are getting:
 - Declarative way to define your transactions and run them.
 
 Testing is easier, because instead of one monstrous function you will have many small callbacks which are easy to cover
-with unit tests. You only need to tests business logic in transactions and that compensations are able to cleanup their
-effects. The Sage itself has 100% test coverage.
+with unit tests. You only need to test business logic in transactions and that compensations are able to cleanup their
+effects. Sage itself has 100% test coverage.
 
 Even more, it is possible to apply a new kind of architecture in an Elixir project where Phoenix contexts
 (or just application domains) are providing helper functions for building sagas to a controller, which then
@@ -219,7 +219,7 @@ defmodule SageExample.UserController do
 end
 ```
 
-If you want to have more examples check out [blog post on Sage](https://medium.com/nebo-15/introducing-sage-a-sagas-pattern-implementation-in-elixir-3ad499f236f6).
+If you want to have more examples check out this [blog post on Sage](https://medium.com/nebo-15/introducing-sage-a-sagas-pattern-implementation-in-elixir-3ad499f236f6).
 
 ## Execution Guarantees and Edge Cases
 
@@ -243,7 +243,7 @@ While Sage will do its best to compensate failures in a transaction and leave a 
 
 5. Can I be absolutely sure that everything went well?
 
-    Unfortunately, no. As with any other distributed system, messages could be lost, network could go down, hardware could fail etc. There are no way to programmatically solve all those cases, even retrying compensations won't help in some of such cases.
+    Unfortunately, no. As with any other distributed system, messages could be lost, the network could go down, hardware could fail etc. There is no way to programmatically solve all those cases, even retrying compensations won't help in some of such cases.
 
 For example, it's possible that a reply from an external API is lost even though a request actually succeeded. In such cases, you might want to retry the compensation which might have an unexpected result. Best way to solve that issue is to [write compensations in an idempotent way](https://hexdocs.pm/sage/Sage.html#t:compensation/0) and to always make sure that you have proper monitoring tools in place.
 
@@ -261,7 +261,7 @@ so your log would look like it occurred without using a Sage.
 
 By default, compensations are not protected from critical errors and would raise an exception.
 This is done to keep simplicity and follow "let it fall" pattern of the language,
-thinking that this kind of errors should be logged and then manually investigated by a developer.
+thinking that these kind of errors should be logged and then manually investigated by a developer.
 
 But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
 When it's registered, compensations are wrapped in a `try..catch` block
@@ -276,21 +276,21 @@ Logging for compensation errors is pretty verbose to drive the attention to the 
 
 ## `finally/2` hook
 
-Sage does it's best to make sure final callback is executed even if there is a program bug in the code.
-This guarantee simplifies integration with a job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
+Sage does it's best to make sure the final callback is executed even if there is a program bug in the code.
+This guarantee simplifies integration with job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
 
-If an error is raised within `finally/2` hook, it's getting logged and ignored. Follow the simple rule - everything that
+If an error is raised within the `finally/2` hook, it gets logged and ignored. Follow the simple rule - everything that
 is on your critical path should be a Sage transaction.
 
 ## Tracing and measuring Sage execution steps
 
 Sage allows you to set a tracer module which is called on each step of the execution flow (before and after transactions and/or compensations). It could be used to report metrics on the execution flow.
 
-If error is raised within tracing function, it's getting logged and ignored.
+If an error is raised within tracing function, it's getting logged and ignored.
 
 # Visualizations
 
-For making it easier to understand what flow you should expect here are few additional examples:
+In order to make it easier to understand what flow you should expect, here are a few additional examples:
 
 1. Retries
 
