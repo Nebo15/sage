@@ -1179,10 +1179,10 @@ defmodule Sage.ExecutorTest do
       end
 
     assert [
-     {Sage.Fixtures, _transaction_function, _transaction_function_arity, _transaction_function_macro_env},
-     {Sage.Executor, :execute, _executor_arity, _executor_macro_env},
-     {Sage.ExecutorTest, _test_function, _test_function_arity, _test_function_macro_env} | _rest
-   ] = stacktrace
+             {Sage.Fixtures, _transaction_function, _transaction_function_arity, _transaction_function_macro_env},
+             {Sage.Executor, :execute, _executor_arity, _executor_macro_env},
+             {Sage.ExecutorTest, _test_function, _test_function_arity, _test_function_macro_env} | _rest
+           ] = stacktrace
   end
 
   def do_send(msg, _opts, pid), do: send(pid, msg)
