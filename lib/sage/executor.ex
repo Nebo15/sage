@@ -5,6 +5,9 @@ defmodule Sage.Executor do
   require Logger
   alias Sage.Executor.Retries
 
+  # List of Sage.Executor functions we do not want to purge from stacktrace
+  @stacktrace_functions_whitelist [:execute]
+
   # # Inline functions for performance optimization
   # @compile {:inline, encode_integer: 1, encode_float: 1}
 
@@ -518,6 +521,13 @@ defmodule Sage.Executor do
   defp return_or_reraise({:ok, effect, other_effects}), do: {:ok, effect, other_effects}
   defp return_or_reraise({:exit, reason}), do: exit(reason)
   defp return_or_reraise({:throw, reason}), do: throw(reason)
-  defp return_or_reraise({:raise, {exception, stacktrace}}), do: reraise(exception, stacktrace)
+  defp return_or_reraise({:raise, {exception, stacktrace}}), do: filter_and_reraise(exception, stacktrace)
   defp return_or_reraise({:error, reason}), do: {:error, reason}
+
+  defp filter_and_reraise(exception, stacktrace) do
+    stacktrace =
+      Enum.reject(stacktrace, &match?({__MODULE__, fun, _, _} when fun not in @stacktrace_functions_whitelist, &1))
+
+    reraise exception, stacktrace
+  end
 end

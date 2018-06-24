@@ -1146,6 +1146,29 @@ defmodule Sage.ExecutorTest do
     end
   end
 
+  test "executor calls are purged from stacktraces" do
+    sage =
+      new()
+      |> run(:step1, transaction(:t1), compensation_with_retry(3))
+      |> run(:step2, transaction(:t2), compensation())
+      |> run_async(:step3, transaction(:t3), not_strict_compensation())
+      |> run_async(:step4, transaction(:t4), not_strict_compensation())
+      |> run(:step5, transaction_with_exception(:t5), compensation(:t5))
+
+    stacktrace =
+      try do
+        execute(sage)
+      rescue
+        _exception -> System.stacktrace()
+      end
+
+    assert [
+     {Sage.Fixtures, _transaction_function, _transaction_function_arity, _transaction_function_macro_env},
+     {Sage.Executor, :execute, _executor_arity, _executor_macro_env},
+     {Sage.ExecutorTest, _test_function, _test_function_arity, _test_function_macro_env} | _rest
+   ] = stacktrace
+  end
+
   def do_send(msg, _opts, pid), do: send(pid, msg)
 
   def mfa_transaction(effects_so_far, opts, cb), do: cb.(effects_so_far, opts)
