@@ -789,6 +789,22 @@ defmodule Sage.ExecutorTest do
 
       hook_assertion.()
     end
+
+    test "does not execute predecessors compensations when exeception is raised and no error handler" do
+      sage =
+        new()
+        |> run(:step1, transaction(:t1), compensation())
+        |> run(:step2, transaction_with_error(:t2), compensation_with_exception())
+        |> run(:step3, transaction(:t3), compensation())
+
+      assert_raise RuntimeError, "error while compensating ", fn ->
+        execute(sage, %{})
+      end
+
+      assert_effect(:t1)
+      assert_effect(:t2)
+      refute_effect(:t3)
+    end
   end
 
   test "compensation receives effects so far" do
