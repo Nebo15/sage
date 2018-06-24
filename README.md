@@ -1,6 +1,6 @@
 # Sage
 
-[![Deps Status](https://beta.hexfaktor.org/badge/all/github/Nebo15/sage.svg)](https://beta.hexfaktor.org/github/Nebo15/sage) [![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
+[![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
 
 Sage is a dependency-free implementation of the [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir and provides a set of additional built-in features.
 
