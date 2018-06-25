@@ -147,7 +147,6 @@ defmodule SageExample do
   # @callback compensation(
   #             effect_to_compensate :: any(),
   #             effects_so_far :: map(),
-  #             {failed_stage_name :: atom(), failed_value :: any()},
   #             attrs :: any()
   #           ) :: :ok | :abort | {:retry, retry_opts :: Sage.retry_opts()} | {:continue, any()}
 
