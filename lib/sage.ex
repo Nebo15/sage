@@ -61,7 +61,7 @@ defmodule Sage do
   @typedoc """
   Name of Sage execution stage.
   """
-  @type stage_name :: atom()
+  @type stage_name :: term()
 
   @typedoc """
   Effects created on Sage execution.
@@ -336,7 +336,7 @@ defmodule Sage do
   callback or use `run/3`.
   """
   @spec run(sage :: t(), name :: stage_name(), transaction :: transaction(), compensation :: compensation()) :: t()
-  def run(sage, name, transaction, compensation) when is_atom(name),
+  def run(sage, name, transaction, compensation),
     do: add_stage(sage, name, build_operation!(:run, transaction, compensation))
 
   @doc """
@@ -345,7 +345,7 @@ defmodule Sage do
   This is an alias for calling `run/4` with a `:noop` instead of compensation callback.
   """
   @spec run(sage :: t(), name :: stage_name(), transaction :: transaction()) :: t()
-  def run(sage, name, transaction) when is_atom(name),
+  def run(sage, name, transaction),
     do: add_stage(sage, name, build_operation!(:run, transaction, :noop))
 
   @doc """
@@ -374,7 +374,7 @@ defmodule Sage do
           compensation :: compensation(),
           opts :: async_opts()
         ) :: t()
-  def run_async(sage, name, transaction, compensation, opts \\ []) when is_atom(name),
+  def run_async(sage, name, transaction, compensation, opts \\ []),
     do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
