@@ -143,6 +143,13 @@ defmodule SageTest do
       assert {:step1, {:run, tx, :noop, []}} in stages
       assert MapSet.member?(names, :step1)
     end
+
+    test "adds operation via tuple as a name" do
+      tx = transaction(:t1)
+      %Sage{stages: stages, stage_names: names} = run(new(), {:step, 1}, tx)
+      assert {{:step, 1}, {:run, tx, :noop, []}} in stages
+      assert MapSet.member?(names, {:step, 1})
+    end
   end
 
   describe "run/4" do
@@ -178,6 +185,28 @@ defmodule SageTest do
         |> run(:step1, transaction(:t2), compensation())
       end
     end
+
+    test "wont raise when on similar tuple names" do
+      tx = transaction(:t1)
+
+      %Sage{stages: stages, stage_names: names} =
+        new()
+        |> run({:step, 1}, tx, :noop)
+        |> run({:step, 2}, tx, :noop)
+
+      assert {{:step, 1}, {:run, tx, :noop, []}} in stages
+      assert MapSet.member?(names, {:step, 1})
+    end
+
+    test "raises when on duplicate tuple names" do
+      message = ~r"{:step, 1} is already a member of the Sage:"
+
+      assert_raise Sage.DuplicateStageError, message, fn ->
+        new()
+        |> run({:step, 1}, transaction(:t1), compensation())
+        |> run({:step, 1}, transaction(:t2), compensation())
+      end
+    end
   end
 
   describe "run_async/4" do
@@ -195,6 +224,14 @@ defmodule SageTest do
       %Sage{stages: stages, stage_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
       assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in stages
       assert MapSet.member?(names, :step1)
+    end
+
+    test "adds operation via tuple as a name" do
+      tx = transaction(:t1)
+      cmp = compensation()
+      %Sage{stages: stages, stage_names: names} = run_async(new(), {:step, 1}, tx, cmp, timeout: 5_000)
+      assert {{:step, 1}, {:run_async, tx, cmp, [timeout: 5_000]}} in stages
+      assert MapSet.member?(names, {:step, 1})
     end
   end
 

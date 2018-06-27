@@ -10,12 +10,13 @@ defmodule Sage.ExecutorTest do
         |> run(:step1, transaction(:t1), compensation())
         |> run(:step2, transaction(:t2), compensation())
         |> run(:step3, {__MODULE__, :mfa_transaction, [transaction(:t3)]}, compensation())
+        |> run({:step, 4}, transaction(:t4), compensation())
         |> finally(hook)
         |> execute(a: :b)
 
       hook_assertion.()
-      assert_effects([:t1, :t2, :t3])
-      assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
+      assert_effects([:t1, :t2, :t3, :t4])
+      assert result == {:ok, :t4, %{:step1 => :t1, :step2 => :t2, :step3 => :t3, {:step, 4} => :t4}}
     end
 
     test "are executed with Executor" do
