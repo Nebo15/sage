@@ -5,9 +5,9 @@ cache:
   - _build/test
   - _build/dev
 elixir:
-  - 1.6.3
+  - 1.6.6
 otp_release:
-  - 20.2
+  - 21.0.1
 env:
   global:
     - MIX_ENV=test
@@ -15,19 +15,26 @@ matrix:
   include:
     - otp_release: 20.2
       elixir: 1.6.3
+    - otp_release: 21.0.1
+      elixir: 1.6.6
       after_script:
         # Submit docs coverage to Inch CI
         - "mix inch.report"
         # Submit code coverage report to Coveralls
         - "mix coveralls.travis"
-    - otp_release: 20.2
-      elixir: 1.6.3
+    - otp_release: 21.0.1
+      elixir: 1.6.6
       env:
         - MIX_ENV=dev
       script:
         # Make sure code is formatted
         - "mix format --check-formatted"
-        # Check type safety
+    - otp_release: 21.0.1
+      elixir: 1.6.6
+      env:
+        - MIX_ENV=dev
+      script:
+        # Type check
         - "mix dialyzer"
 script:
   # Run all tests except pending ones
