@@ -16,7 +16,7 @@ defmodule Sage.Executor.RetriesTest do
     end
 
     test "applies backoff" do
-      assert_in_delta retry_execution_time(1, retry_limit: 2, base_backoff: 10, enable_jitter: false), 20, 5
+      assert retry_execution_time(1, retry_limit: 2, base_backoff: 10, enable_jitter: false) >= 20
     end
 
     test "logs message on invalid options" do
