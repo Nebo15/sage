@@ -1,5 +1,5 @@
 Type specification 'Elixir.Sage.DuplicateStageError':exception(elixir:keyword()) ->
 Type specification 'Elixir.Sage.DuplicateTracerError':exception(elixir:keyword()) ->
 Type specification 'Elixir.Sage.DuplicateFinalHookError':exception(elixir:keyword()) -> 'Elixir.Exception':t()
-0: Unknown function 'Elixir.
+0: Unknown function 'Elixir.ExUnit
 test/support/fixtures.ex
