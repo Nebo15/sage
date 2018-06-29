@@ -5,11 +5,12 @@ defmodule Sage.TestCompensationErrorHandler do
   def handle_error({:exception, %Sage.MalformedCompensationReturnError{}, _stacktrace}, compensations_to_run, opts) do
     all_effects = all_effects(compensations_to_run)
 
-    compensations_to_run
-    |> List.delete_at(0)
-    |> Enum.map(fn {_name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
-      apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, all_effects, opts])
-    end)
+    :ok =
+      compensations_to_run
+      |> List.delete_at(0)
+      |> Enum.each(fn {_name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
+        apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, all_effects, opts])
+      end)
 
     {:error, :failed_to_compensate_errors}
   end
@@ -17,9 +18,10 @@ defmodule Sage.TestCompensationErrorHandler do
   def handle_error(_error, compensations_to_run, opts) do
     all_effects = all_effects(compensations_to_run)
 
-    Enum.map(compensations_to_run, fn {_name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
-      apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, all_effects, opts])
-    end)
+    :ok =
+      Enum.each(compensations_to_run, fn {_name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
+        apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, all_effects, opts])
+      end)
 
     {:error, :failed_to_compensate_errors}
   end

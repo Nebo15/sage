@@ -24,8 +24,13 @@ defmodule Sage.Mixfile do
 
       # Custom testing
       test_coverage: [tool: ExCoveralls],
-      preferred_cli_env: [coveralls: :test],
-      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"]
+      preferred_cli_env: [coveralls: :test, dialyzer: :test],
+      dialyzer: [
+        flags: [:unmatched_returns, :error_handling, :race_conditions, :underspecs],
+        plt_add_apps: [:mix],
+        format: "dialyxir",
+        ignore_warnings: ".dialyzer_ignore"
+      ]
     ]
   end
 
@@ -43,7 +48,7 @@ defmodule Sage.Mixfile do
     [
       {:ex_doc, ">= 0.16.0", only: [:dev, :test]},
       {:excoveralls, ">= 0.7.0", only: [:dev, :test]},
-      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:dialyxir, github: "jeremyjh/dialyxir", only: [:dev, :test]},
       {:inch_ex, ">= 0.0.0", only: :test}
     ]
   end
