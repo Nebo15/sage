@@ -19,7 +19,8 @@ defmodule Sage.TestCompensationErrorHandler do
     all_effects = all_effects(compensations_to_run)
 
     :ok =
-      Enum.each(compensations_to_run, fn {_name, compensation, effect_to_compensate} when is_function(compensation, 3) ->
+      Enum.each(compensations_to_run, fn {_name, compensation, effect_to_compensate}
+                                         when is_function(compensation, 3) ->
         apply(Sage.Fixtures.not_strict_compensation(), [effect_to_compensate, all_effects, opts])
       end)
 
