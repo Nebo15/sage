@@ -411,14 +411,14 @@ defmodule Sage do
   @since "0.3.3"
   @spec transaction(sage :: t(), repo :: module(), opts :: any()) ::
           {:ok, result :: any(), effects :: effects()} | {:error, any()}
-  def transaction(%Sage{} = sage, repo, opts \\ []) do
+  def transaction(%Sage{} = sage, repo, opts \\ [], transaction_options \\ []) do
     return =
       repo.transaction(fn ->
         case execute(sage, opts) do
           {:ok, result, effects} -> {:ok, result, effects}
           {:error, reason} -> repo.rollback(reason)
         end
-      end)
+      end, transaction_options)
 
     case return do
       {:ok, result} -> result
