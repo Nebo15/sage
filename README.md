@@ -275,7 +275,7 @@ Logging for compensation errors is pretty verbose to drive the attention to the 
 
 ## `finally/2` hook
 
-Sage does it's best to make sure the final callback is executed even if there is a program bug in the code.
+Sage does its best to make sure the final callback is executed even if there is a program bug in the code.
 This guarantee simplifies integration with job processing queues, you can read more about it at [GenTask Readme](https://github.com/Nebo15/gen_task).
 
 If an error is raised within the `finally/2` hook, it gets logged and ignored. Follow the simple rule - everything that
