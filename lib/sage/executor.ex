@@ -171,7 +171,7 @@ defmodule Sage.Executor do
 
     other ->
       {:raise,
-       {%Sage.MalformedTransactionReturnError{name: name, transaction: mfa, return: other}, System.stacktrace()}}
+       {%Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}, System.stacktrace()}}
   end
 
   defp apply_transaction_fun(name, fun, effects_so_far, opts) do
@@ -188,7 +188,7 @@ defmodule Sage.Executor do
 
     other ->
       {:raise,
-       {%Sage.MalformedTransactionReturnError{name: name, transaction: fun, return: other}, System.stacktrace()}}
+       {%Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}, System.stacktrace()}}
   end
 
   defp handle_transaction_result({:start_compensations, state}), do: {:start_compensations, state}
@@ -293,7 +293,7 @@ defmodule Sage.Executor do
       {:continue, effect}
 
     other ->
-      exception_struct = %Sage.MalformedCompensationReturnError{name: name, compensation: compensation, return: other}
+      exception_struct = %Sage.MalformedCompensationReturnError{stage: name, compensation: compensation, return: other}
       {:raise, {exception_struct, System.stacktrace()}}
   end
 
