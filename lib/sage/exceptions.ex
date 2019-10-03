@@ -96,12 +96,12 @@ defmodule Sage.MalformedTransactionReturnError do
   @moduledoc """
   Raised at runtime when the transaction or operation has an malformed return.
   """
-  defexception [:transaction, :return]
+  defexception [:stage, :transaction, :return]
 
   @impl true
-  def message(%__MODULE__{transaction: transaction, return: return}) do
+  def message(%__MODULE__{stage: stage, transaction: transaction, return: return}) do
     """
-    expected transaction #{inspect(transaction)} to return
+    expected transaction #{inspect(transaction)} for stage #{inspect(stage)} to return
     {:ok, effect}, {:error, reason} or {:abort, reason}, got:
 
       #{inspect(return)}
@@ -113,12 +113,12 @@ defmodule Sage.MalformedCompensationReturnError do
   @moduledoc """
   Raised at runtime when the compensation or operation has an malformed return.
   """
-  defexception [:compensation, :return]
+  defexception [:stage, :compensation, :return]
 
   @impl true
-  def message(%__MODULE__{compensation: compensation, return: return}) do
+  def message(%__MODULE__{stage: stage, compensation: compensation, return: return}) do
     """
-    expected compensation #{inspect(compensation)} to return
+    expected compensation #{inspect(compensation)} for stage #{inspect(stage)} to return
     :ok, :abort, {:retry, retry_opts} or {:continue, effect}, got:
 
       #{inspect(return)}

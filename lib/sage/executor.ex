@@ -124,7 +124,7 @@ defmodule Sage.Executor do
   defp maybe_execute_transaction({{name, operation}, state}, opts) do
     {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, tracers} = state
     tracers = maybe_notify_tracers(tracers, :start_transaction, name)
-    return = execute_transaction(operation, effects_so_far, opts)
+    return = execute_transaction(operation, name, effects_so_far, opts)
 
     tracers =
       case return do
@@ -136,8 +136,8 @@ defmodule Sage.Executor do
     {name, operation, return, state}
   end
 
-  defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
-    apply_transaction_fun(transaction, effects_so_far, opts)
+  defp execute_transaction({:run, transaction, _compensation, []}, name, effects_so_far, opts) do
+    apply_transaction_fun(name, transaction, effects_so_far, opts)
   rescue
     exception -> {:raise, {exception, System.stacktrace()}}
   catch
@@ -145,19 +145,19 @@ defmodule Sage.Executor do
     :throw, reason -> {:throw, reason}
   end
 
-  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, effects_so_far, opts) do
+  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, name, effects_so_far, opts) do
     logger_metadata = Logger.metadata()
 
     task =
       Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
         Logger.metadata(logger_metadata)
-        apply_transaction_fun(transaction, effects_so_far, opts)
+        apply_transaction_fun(name, transaction, effects_so_far, opts)
       end)
 
     {task, tx_opts}
   end
 
-  defp apply_transaction_fun({mod, fun, args} = mfa, effects_so_far, opts) do
+  defp apply_transaction_fun(name, {mod, fun, args} = mfa, effects_so_far, opts) do
     apply(mod, fun, [effects_so_far, opts | args])
   else
     {:ok, effect} ->
@@ -170,10 +170,11 @@ defmodule Sage.Executor do
       {:abort, reason}
 
     other ->
-      {:raise, {%Sage.MalformedTransactionReturnError{transaction: mfa, return: other}, System.stacktrace()}}
+      {:raise,
+       {%Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}, System.stacktrace()}}
   end
 
-  defp apply_transaction_fun(fun, effects_so_far, opts) do
+  defp apply_transaction_fun(name, fun, effects_so_far, opts) do
     apply(fun, [effects_so_far, opts])
   else
     {:ok, effect} ->
@@ -186,7 +187,8 @@ defmodule Sage.Executor do
       {:abort, reason}
 
     other ->
-      {:raise, {%Sage.MalformedTransactionReturnError{transaction: fun, return: other}, System.stacktrace()}}
+      {:raise,
+       {%Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}, System.stacktrace()}}
   end
 
   defp handle_transaction_result({:start_compensations, state}), do: {:start_compensations, state}
@@ -264,13 +266,13 @@ defmodule Sage.Executor do
     {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
     tracers = maybe_notify_tracers(tracers, :start_compensation, name)
-    return = safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
+    return = safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, opts)
     tracers = maybe_notify_tracers(tracers, :finish_compensation, name)
     state = {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
     {name, operation, return, effect_to_compensate, state}
   end
 
-  defp safe_apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts) do
+  defp safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, opts) do
     apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
   rescue
     exception -> {:raise, {exception, System.stacktrace()}}
@@ -291,7 +293,7 @@ defmodule Sage.Executor do
       {:continue, effect}
 
     other ->
-      exception_struct = %Sage.MalformedCompensationReturnError{compensation: compensation, return: other}
+      exception_struct = %Sage.MalformedCompensationReturnError{stage: name, compensation: compensation, return: other}
       {:raise, {exception_struct, System.stacktrace()}}
   end
 
