@@ -119,9 +119,9 @@ defmodule Sage.Executor do
   defp maybe_execute_transaction({:start_compensations, state}, _opts), do: {:start_compensations, state}
 
   defp maybe_execute_transaction({{name, operation}, state}, opts) do
-    {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, tracers} = state
+    {last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, tracers} = state
     tracers = maybe_notify_tracers(tracers, :start_transaction, name)
-    return = execute_transaction(operation, effects_so_far, opts)
+    return = execute_transaction(operation, last_effect_or_error, effects_so_far, opts)
 
     tracers =
       case return do
@@ -133,8 +133,8 @@ defmodule Sage.Executor do
     {name, operation, return, state}
   end
 
-  defp execute_transaction({:run, transaction, _compensation, []}, effects_so_far, opts) do
-    apply_transaction_fun(transaction, effects_so_far, opts)
+  defp execute_transaction({:run, transaction, _compensation, []}, latest_effect, effects_so_far, opts) do
+    apply_transaction_fun(transaction, latest_effect, effects_so_far, opts)
   rescue
     exception -> {:raise, {exception, System.stacktrace()}}
   catch
@@ -142,36 +142,20 @@ defmodule Sage.Executor do
     :throw, reason -> {:throw, reason}
   end
 
-  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, effects_so_far, opts) do
+  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, latest_effect, effects_so_far, opts) do
     logger_metadata = Logger.metadata()
 
     task =
       Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
         Logger.metadata(logger_metadata)
-        apply_transaction_fun(transaction, effects_so_far, opts)
+        apply_transaction_fun(transaction, latest_effect, effects_so_far, opts)
       end)
 
     {task, tx_opts}
   end
 
-  defp apply_transaction_fun({mod, fun, args} = mfa, effects_so_far, opts) do
-    apply(mod, fun, [effects_so_far, opts | args])
-  else
-    {:ok, effect} ->
-      {:ok, effect}
-
-    {:error, reason} ->
-      {:error, reason}
-
-    {:abort, reason} ->
-      {:abort, reason}
-
-    other ->
-      {:raise, {%Sage.MalformedTransactionReturnError{transaction: mfa, return: other}, System.stacktrace()}}
-  end
-
-  defp apply_transaction_fun(fun, effects_so_far, opts) do
-    apply(fun, [effects_so_far, opts])
+  defp apply_transaction_fun(fun, latest_effect, effects_so_far, opts) do
+    apply_function(fun, latest_effect, effects_so_far, opts)
   else
     {:ok, effect} ->
       {:ok, effect}
@@ -185,6 +169,22 @@ defmodule Sage.Executor do
     other ->
       {:raise, {%Sage.MalformedTransactionReturnError{transaction: fun, return: other}, System.stacktrace()}}
   end
+
+  defp apply_function({mod, fun, args} = mfa, latest_effect, effects_so_far, opts) do
+    case mfa_arity(mfa) do
+      2 -> apply(mod, fun, [effects_so_far, opts | args])
+      3 -> apply(mod, fun, [latest_effect, effects_so_far, opts | args])
+    end
+  end
+
+  defp apply_function(fun, _latest_effect, effects_so_far, opts) when is_function(fun, 2),
+    do: apply(fun, [effects_so_far, opts])
+
+  defp apply_function(fun, latest_effect, effects_so_far, opts) when is_function(fun, 3),
+    do: apply(fun, [latest_effect, effects_so_far, opts])
+
+  defp mfa_arity({mod, fun, args}),
+    do: (:functions |> mod.__info__ |> Keyword.get_values(fun) |> hd()) - Enum.count(args)
 
   defp handle_transaction_result({:start_compensations, state}), do: {:start_compensations, state}
 

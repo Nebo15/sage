@@ -151,7 +151,7 @@ defmodule Sage do
   """
   @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
-  defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
+  defguardp is_transaction(value) when is_function(value, 2) or is_function(value, 3) or is_mfa(value)
 
   @typedoc """
   Compensation callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
