@@ -402,23 +402,26 @@ defmodule Sage do
   def to_function(%Sage{} = sage, opts), do: fn -> execute(sage, opts) end
 
   @doc """
-  Executes Sage with `Ecto.Repo.transaction/1`.
+  Executes Sage with `Ecto.Repo.transaction/2`.
 
   Transaction is rolled back on error.
 
-  Ecto must be included as application dependency.
+  Ecto must be included as application dependency if you want to use this function.
   """
   @doc since: "0.3.3"
-  @spec transaction(sage :: t(), repo :: module(), opts :: any()) ::
+  @spec transaction(sage :: t(), repo :: module(), opts :: any(), transaction_opts :: any()) ::
           {:ok, result :: any(), effects :: effects()} | {:error, any()}
-  def transaction(%Sage{} = sage, repo, opts \\ []) do
+  def transaction(%Sage{} = sage, repo, opts \\ [], transaction_opts \\ []) do
     return =
-      repo.transaction(fn ->
-        case execute(sage, opts) do
-          {:ok, result, effects} -> {:ok, result, effects}
-          {:error, reason} -> repo.rollback(reason)
-        end
-      end)
+      repo.transaction(
+        fn ->
+          case execute(sage, opts) do
+            {:ok, result, effects} -> {:ok, result, effects}
+            {:error, reason} -> repo.rollback(reason)
+          end
+        end,
+        transaction_opts
+      )
 
     case return do
       {:ok, result} -> result
