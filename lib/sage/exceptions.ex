@@ -4,7 +4,7 @@ defmodule Sage.EmptyError do
   """
   defexception [:message]
 
-  @doc false
+  @impl true
   def exception(_opts) do
     message = "trying to execute empty Sage is not allowed"
     %__MODULE__{message: message}
