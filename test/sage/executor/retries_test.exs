@@ -71,6 +71,6 @@ defmodule Sage.Executor.RetriesTest do
     retry? = retry_with_backoff?(count, opts)
     stop = System.monotonic_time()
     assert retry?
-    div(System.convert_time_unit(stop - start, :native, :micro_seconds), 100) / 10
+    div(System.convert_time_unit(stop - start, :native, :microsecond), 100) / 10
   end
 end

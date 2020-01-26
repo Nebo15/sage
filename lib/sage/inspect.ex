@@ -10,7 +10,7 @@ defimpl Inspect, for: Sage do
   def inspect(sage, opts) do
     list = to_list(sage)
     left = concat(["#Sage", format_compensation_error_handler(sage.on_compensation_error), "<"])
-    surround_many(left, list, ">", opts, fn str, _ -> str end)
+    container_doc(left, list, ">", opts, fn str, _ -> str end)
   end
 
   defp to_list(sage) do

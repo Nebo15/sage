@@ -158,37 +158,37 @@ defmodule Sage.Executor do
   end
 
   defp apply_transaction_fun(name, {mod, fun, args} = mfa, effects_so_far, opts) do
-    apply(mod, fun, [effects_so_far, opts | args])
-  else
-    {:ok, effect} ->
-      {:ok, effect}
+    case apply(mod, fun, [effects_so_far, opts | args]) do
+      {:ok, effect} ->
+        {:ok, effect}
 
-    {:error, reason} ->
-      {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
 
-    {:abort, reason} ->
-      {:abort, reason}
+      {:abort, reason} ->
+        {:abort, reason}
 
-    other ->
-      {:raise,
-       {%Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}, System.stacktrace()}}
+      other ->
+        {:raise,
+         {%Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}, System.stacktrace()}}
+    end
   end
 
   defp apply_transaction_fun(name, fun, effects_so_far, opts) do
-    apply(fun, [effects_so_far, opts])
-  else
-    {:ok, effect} ->
-      {:ok, effect}
+    case apply(fun, [effects_so_far, opts]) do
+      {:ok, effect} ->
+        {:ok, effect}
 
-    {:error, reason} ->
-      {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
 
-    {:abort, reason} ->
-      {:abort, reason}
+      {:abort, reason} ->
+        {:abort, reason}
 
-    other ->
-      {:raise,
-       {%Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}, System.stacktrace()}}
+      other ->
+        {:raise,
+         {%Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}, System.stacktrace()}}
+    end
   end
 
   defp handle_transaction_result({:start_compensations, state}), do: {:start_compensations, state}

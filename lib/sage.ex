@@ -408,7 +408,7 @@ defmodule Sage do
 
   Ecto must be included as application dependency.
   """
-  @since "0.3.3"
+  @doc since: "0.3.3"
   @spec transaction(sage :: t(), repo :: module(), opts :: any()) ::
           {:ok, result :: any(), effects :: effects()} | {:error, any()}
   def transaction(%Sage{} = sage, repo, opts \\ []) do

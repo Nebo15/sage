@@ -853,13 +853,13 @@ defmodule Sage.ExecutorTest do
       for step <- [:step1, :step2, :step3, :step4, :step5] do
         assert_receive {^step, :start_transaction, _tracing_state}
         assert_receive {^step, :finish_transaction, time_taken, _tracing_state}
-        assert div(System.convert_time_unit(time_taken, :native, :micro_seconds), 100) / 10 > 0.9
+        assert div(System.convert_time_unit(time_taken, :native, :microsecond), 100) / 10 > 0.9
       end
 
       for step <- [:step1, :step2, :step3, :step4, :step5] do
         assert_receive {^step, :start_compensation, _tracing_state}
         assert_receive {^step, :finish_compensation, time_taken, _tracing_state}
-        assert div(System.convert_time_unit(time_taken, :native, :micro_seconds), 100) / 10 > 0.9
+        assert div(System.convert_time_unit(time_taken, :native, :microsecond), 100) / 10 > 0.9
       end
     end
   end
