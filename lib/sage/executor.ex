@@ -2,21 +2,47 @@ defmodule Sage.Executor do
   @moduledoc """
   This module is responsible for Sage execution.
   """
-  require Logger
+  import Record
   alias Sage.Executor.Retries
+  require Logger
+
+  @type state ::
+          record(:state,
+            last_effect_or_error:
+              {name :: term(), reason :: term()}
+              | {:raise, exception :: Exception.t()}
+              | {:throw, reason :: term()}
+              | {:exit, reason :: term()},
+            effects_so_far: map(),
+            attempts: non_neg_integer(),
+            aborted?: boolean(),
+            tasks: [{Task.t(), Keyword.t()}],
+            on_compensation_error: :raise | module(),
+            tracers_and_state: {MapSet.t(), term()}
+          )
+
+  defrecordp(:state,
+    last_effect_or_error: nil,
+    effects_so_far: %{},
+    attempts: 1,
+    aborted?: false,
+    tasks: [],
+    on_compensation_error: :raise,
+    tracers_and_state: {MapSet.new(), []}
+  )
 
   # List of Sage.Executor functions we do not want to purge from stacktrace
   @stacktrace_functions_whitelist [:execute]
 
-  # # Inline functions for performance optimization
+  # # TODO: Inline functions for performance optimization
   # @compile {:inline, encode_integer: 1, encode_float: 1}
 
-  @spec execute(sage :: Sage.t(), opts :: any()) :: {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
-  def execute(sage, opts \\ [])
+  @spec execute(sage :: Sage.t(), attrs :: any()) :: {:ok, result :: any(), effects :: Sage.effects()} | {:error, any()}
+  def execute(sage, attrs \\ [])
 
   def execute(%Sage{stages: []}, _opts), do: raise(Sage.EmptyError)
 
-  def execute(%Sage{} = sage, opts) do
+  def execute(%Sage{} = sage, attrs) do
     %{
       stages: stages,
       final_hooks: final_hooks,
@@ -24,39 +50,42 @@ defmodule Sage.Executor do
       tracers: tracers
     } = sage
 
-    inital_state = {nil, %{}, {1, []}, false, [], on_compensation_error, {MapSet.to_list(tracers), opts}}
+    inital_state =
+      state(on_compensation_error: on_compensation_error, tracers_and_state: {MapSet.to_list(tracers), attrs})
+
     final_hooks = MapSet.to_list(final_hooks)
 
     stages
     |> Enum.reverse()
-    |> execute_transactions([], opts, inital_state)
-    |> maybe_notify_final_hooks(final_hooks, opts)
+    |> execute_transactions([], attrs, inital_state)
+    |> maybe_notify_final_hooks(final_hooks, attrs)
     |> return_or_reraise()
   end
 
   # Transactions
 
-  defp execute_transactions([], executed_stages, opts, state) do
-    {last_effect, effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
-
-    if tasks == [] do
-      {:ok, last_effect, effects_so_far}
-    else
-      {:next_transaction, state}
-      |> maybe_await_for_tasks(tasks)
-      |> handle_transaction_result()
-      |> execute_next_stage([], executed_stages, opts)
-    end
+  defp execute_transactions([], _executed_stages, _opts, state(tasks: []) = state) do
+    state(last_effect_or_error: last_effect, effects_so_far: effects_so_far) = state
+    {:ok, last_effect, effects_so_far}
   end
 
-  defp execute_transactions([stage | stages], executed_stages, opts, state) do
-    {_last_effect_or_error, _effects_so_far, _retries, _abort?, tasks, _on_compensation_error, _tracers} = state
+  defp execute_transactions([], executed_stages, attrs, state) do
+    state(tasks: tasks) = state
+
+    {:next_transaction, state}
+    |> maybe_await_for_tasks(tasks)
+    |> handle_transaction_result()
+    |> execute_next_stage([], executed_stages, attrs)
+  end
+
+  defp execute_transactions([stage | stages], executed_stages, attrs, state) do
+    state(tasks: tasks) = state
 
     {stage, state}
     |> maybe_await_for_tasks(tasks)
-    |> maybe_execute_transaction(opts)
+    |> maybe_execute_transaction(attrs)
     |> handle_transaction_result()
-    |> execute_next_stage(stages, executed_stages, opts)
+    |> execute_next_stage(stages, executed_stages, attrs)
   end
 
   defp maybe_await_for_tasks({stage, state}, []), do: {stage, state}
@@ -66,7 +95,7 @@ defmodule Sage.Executor do
     do: {stage, state}
 
   defp maybe_await_for_tasks({stage, state}, tasks) do
-    state = put_elem(state, 4, [])
+    state = state(state, tasks: [])
 
     tasks
     |> Enum.map(&await_for_task/1)
@@ -95,20 +124,25 @@ defmodule Sage.Executor do
   end
 
   defp handle_task_result({name, result}, {:start_compensations, state}) do
-    failure_reason = elem(state, 0)
-    state = put_elem(state, 6, maybe_notify_tracers(elem(state, 6), :finish_transaction, name))
+    state(last_effect_or_error: failure_reason, tracers_and_state: tracers_and_state) = state
+    tracers_and_state = maybe_notify_tracers(tracers_and_state, :finish_transaction, name)
+    state = state(state, tracers_and_state: tracers_and_state)
 
     case handle_transaction_result({name, :async, result, state}) do
       {:next_transaction, {^name, :async}, state} ->
-        {:start_compensations, put_elem(state, 0, failure_reason)}
+        state = state(state, last_effect_or_error: failure_reason)
+        {:start_compensations, state}
 
       {:start_compensations, {^name, :async}, state} ->
-        {:start_compensations, put_elem(state, 0, failure_reason)}
+        state = state(state, last_effect_or_error: failure_reason)
+        {:start_compensations, state}
     end
   end
 
   defp handle_task_result({name, result}, {stage, state}) do
-    state = put_elem(state, 6, maybe_notify_tracers(elem(state, 6), :finish_transaction, name))
+    state(tracers_and_state: tracers_and_state) = state
+    tracers_and_state = maybe_notify_tracers(tracers_and_state, :finish_transaction, name)
+    state = state(state, tracers_and_state: tracers_and_state)
 
     case handle_transaction_result({name, :async, result, state}) do
       {:next_transaction, {^name, :async}, state} ->
@@ -121,23 +155,24 @@ defmodule Sage.Executor do
 
   defp maybe_execute_transaction({:start_compensations, state}, _opts), do: {:start_compensations, state}
 
-  defp maybe_execute_transaction({{name, operation}, state}, opts) do
-    {_last_effect_or_error, effects_so_far, _retries, _abort?, _tasks, _on_compensation_error, tracers} = state
-    tracers = maybe_notify_tracers(tracers, :start_transaction, name)
-    return = execute_transaction(operation, name, effects_so_far, opts)
+  defp maybe_execute_transaction({{name, operation}, state}, attrs) do
+    state(effects_so_far: effects_so_far, tracers_and_state: tracers_and_state) = state
+    tracers_and_state = maybe_notify_tracers(tracers_and_state, :start_transaction, name)
 
-    tracers =
+    return = execute_transaction(operation, name, effects_so_far, attrs)
+
+    tracers_and_state =
       case return do
-        {%Task{}, _async_opts} -> tracers
-        _other -> maybe_notify_tracers(tracers, :finish_transaction, name)
+        {%Task{}, _async_opts} -> tracers_and_state
+        _other -> maybe_notify_tracers(tracers_and_state, :finish_transaction, name)
       end
 
-    state = put_elem(state, 6, tracers)
+    state = state(state, tracers_and_state: tracers_and_state)
     {name, operation, return, state}
   end
 
-  defp execute_transaction({:run, transaction, _compensation, []}, name, effects_so_far, opts) do
-    apply_transaction_fun(name, transaction, effects_so_far, opts)
+  defp execute_transaction({:run, transaction, _compensation, []}, name, effects_so_far, attrs) do
+    apply_transaction_fun(name, transaction, effects_so_far, attrs)
   rescue
     exception -> {:raise, {exception, __STACKTRACE__}}
   catch
@@ -145,20 +180,20 @@ defmodule Sage.Executor do
     :throw, reason -> {:throw, reason}
   end
 
-  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, name, effects_so_far, opts) do
+  defp execute_transaction({:run_async, transaction, _compensation, tx_opts}, name, effects_so_far, attrs) do
     logger_metadata = Logger.metadata()
 
     task =
       Task.Supervisor.async_nolink(Sage.AsyncTransactionSupervisor, fn ->
-        Logger.metadata(logger_metadata)
-        apply_transaction_fun(name, transaction, effects_so_far, opts)
+        _ = Logger.metadata(logger_metadata)
+        apply_transaction_fun(name, transaction, effects_so_far, attrs)
       end)
 
     {task, tx_opts}
   end
 
-  defp apply_transaction_fun(name, {mod, fun, args} = mfa, effects_so_far, opts) do
-    case apply(mod, fun, [effects_so_far, opts | args]) do
+  defp apply_transaction_fun(name, {mod, fun, args} = mfa, effects_so_far, attrs) do
+    case apply(mod, fun, [effects_so_far, attrs | args]) do
       {:ok, effect} ->
         {:ok, effect}
 
@@ -173,8 +208,8 @@ defmodule Sage.Executor do
     end
   end
 
-  defp apply_transaction_fun(name, fun, effects_so_far, opts) do
-    case apply(fun, [effects_so_far, opts]) do
+  defp apply_transaction_fun(name, fun, effects_so_far, attrs) do
+    case apply(fun, [effects_so_far, attrs]) do
       {:ok, effect} ->
         {:ok, effect}
 
@@ -193,60 +228,73 @@ defmodule Sage.Executor do
 
   defp handle_transaction_result({:next_transaction, state}), do: {:next_transaction, state}
 
-  defp handle_transaction_result({name, operation, {%Task{}, _async_opts} = async_job, state}) do
-    {last_effect_or_error, effects_so_far, retries, _abort?, tasks, on_compensation_error, tracers} = state
-    tasks = [{name, async_job} | tasks]
-    state = {last_effect_or_error, effects_so_far, retries, false, tasks, on_compensation_error, tracers}
+  defp handle_transaction_result({name, operation, {%Task{}, _async_opts} = async_step, state}) do
+    state(tasks: tasks) = state
+    state = state(state, tasks: [{name, async_step} | tasks], aborted?: false)
     {:next_transaction, {name, operation}, state}
   end
 
   defp handle_transaction_result({name, operation, {:ok, effect}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
-    state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
+    state(effects_so_far: effects_so_far) = state
+
+    state =
+      state(state, last_effect_or_error: effect, effects_so_far: Map.put(effects_so_far, name, effect), aborted?: false)
+
     {:next_transaction, {name, operation}, state}
   end
 
   defp handle_transaction_result({name, operation, {:abort, reason}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
-    state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, true, [], on_compensation_error, tracers}
+    state(effects_so_far: effects_so_far) = state
+
+    state =
+      state(state,
+        last_effect_or_error: {name, reason},
+        effects_so_far: Map.put(effects_so_far, name, reason),
+        aborted?: true
+      )
+
     {:start_compensations, {name, operation}, state}
   end
 
   defp handle_transaction_result({name, operation, {:error, reason}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, _abort?, [], on_compensation_error, tracers} = state
-    state = {{name, reason}, Map.put(effects_so_far, name, reason), retries, false, [], on_compensation_error, tracers}
+    state(effects_so_far: effects_so_far) = state
+
+    state =
+      state(state,
+        last_effect_or_error: {name, reason},
+        effects_so_far: Map.put(effects_so_far, name, reason),
+        aborted?: false
+      )
+
     {:start_compensations, {name, operation}, state}
   end
 
-  defp handle_transaction_result({name, operation, {:raise, reraise_args}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
-    state = {{:raise, reraise_args}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+  defp handle_transaction_result({name, operation, {:raise, exception}, state}) do
+    state = state(state, last_effect_or_error: {:raise, exception})
     {:start_compensations, {name, operation}, state}
   end
 
   defp handle_transaction_result({name, operation, {:throw, reason}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
-    state = {{:throw, reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+    state = state(state, last_effect_or_error: {:throw, reason})
     {:start_compensations, {name, operation}, state}
   end
 
-  defp handle_transaction_result({name, operation, {:exit, exit_reason}, state}) do
-    {_last_effect_or_error, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
-    state = {{:exit, exit_reason}, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+  defp handle_transaction_result({name, operation, {:exit, reason}, state}) do
+    state = state(state, last_effect_or_error: {:exit, reason})
     {:start_compensations, {name, operation}, state}
   end
 
   # Compensation
 
-  defp execute_compensations(compensated_stages, [stage | stages], opts, state) do
+  defp execute_compensations(compensated_stages, [stage | stages], attrs, state) do
     {stage, state}
-    |> execute_compensation(opts)
+    |> execute_compensation(attrs)
     |> handle_compensation_result()
-    |> execute_next_stage(compensated_stages, stages, opts)
+    |> execute_next_stage(compensated_stages, stages, attrs)
   end
 
   defp execute_compensations(_compensated_stages, [], _opts, state) do
-    {last_error, %{}, _retries, _abort?, [], _on_compensation_error, _tracers} = state
+    state(last_effect_or_error: last_error) = state
 
     case last_error do
       {:exit, reason} -> {:exit, reason}
@@ -261,18 +309,18 @@ defmodule Sage.Executor do
     {name, operation, :ok, nil, state}
   end
 
-  defp execute_compensation({{name, {_type, _transaction, compensation, _tx_opts} = operation}, state}, opts) do
-    {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers} = state
+  defp execute_compensation({{name, {_type, _transaction, compensation, _tx_opts} = operation}, state}, attrs) do
+    state(effects_so_far: effects_so_far, tracers_and_state: tracers_and_state) = state
     {effect_to_compensate, effects_so_far} = Map.pop(effects_so_far, name)
-    tracers = maybe_notify_tracers(tracers, :start_compensation, name)
-    return = safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, opts)
-    tracers = maybe_notify_tracers(tracers, :finish_compensation, name)
-    state = {name_and_reason, effects_so_far, retries, abort?, [], on_compensation_error, tracers}
+    tracers_and_state = maybe_notify_tracers(tracers_and_state, :start_compensation, name)
+    return = safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, attrs)
+    tracers_and_state = maybe_notify_tracers(tracers_and_state, :finish_compensation, name)
+    state = state(state, effects_so_far: effects_so_far, tracers_and_state: tracers_and_state)
     {name, operation, return, effect_to_compensate, state}
   end
 
-  defp safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, opts) do
-    apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
+  defp safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, attrs) do
+    apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, attrs)
   rescue
     exception -> {:raise, {exception, __STACKTRACE__}}
   catch
@@ -295,42 +343,46 @@ defmodule Sage.Executor do
       {:raise, %Sage.MalformedCompensationReturnError{stage: name, compensation: compensation, return: other}}
   end
 
-  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, opts),
-    do: apply(mod, fun, [effect_to_compensate, effects_so_far, opts | args])
+  defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, attrs),
+    do: apply(mod, fun, [effect_to_compensate, effects_so_far, attrs | args])
 
-  defp apply_compensation_fun(fun, effect_to_compensate, effects_so_far, opts),
-    do: apply(fun, [effect_to_compensate, effects_so_far, opts])
+  defp apply_compensation_fun(fun, effect_to_compensate, effects_so_far, attrs),
+    do: apply(fun, [effect_to_compensate, effects_so_far, attrs])
 
   defp handle_compensation_result({name, operation, :ok, _compensated_effect, state}) do
     {:next_compensation, {name, operation}, state}
   end
 
   defp handle_compensation_result({name, operation, :abort, _compensated_effect, state}) do
-    state = put_elem(state, 3, true)
+    state = state(state, aborted?: true)
     {:next_compensation, {name, operation}, state}
   end
 
-  defp handle_compensation_result({name, operation, {:retry, _retry_opts}, _compensated_effect, state})
-       when elem(state, 3) do
+  defp handle_compensation_result(
+         {name, operation, {:retry, _retry_opts}, _compensated_effect, state(aborted?: true) = state}
+       ) do
     {:next_compensation, {name, operation}, state}
   end
 
-  defp handle_compensation_result({name, operation, {:retry, retry_opts}, _compensated_effect, state})
-       when not elem(state, 3) do
-    {last_effect_or_error, effects_so_far, {count, _old_retry_opts}, false, [], on_compensation_error, tracers} = state
+  defp handle_compensation_result(
+         {name, operation, {:retry, retry_opts}, _compensated_effect, state(aborted?: false) = state}
+       ) do
+    state(attempts: attempts) = state
 
-    if Retries.retry_with_backoff?(count, retry_opts) do
-      state = {last_effect_or_error, effects_so_far, {count + 1, retry_opts}, false, [], on_compensation_error, tracers}
+    if Retries.retry_with_backoff?(attempts, retry_opts) do
+      state = state(attempts: attempts + 1)
       {:retry_transaction, {name, operation}, state}
     else
       {:next_compensation, {name, operation}, state}
     end
   end
 
-  defp handle_compensation_result({name, operation, {:continue, effect}, _compensated_effect, state})
-       when not elem(state, 3) and name == elem(elem(state, 0), 0) do
-    {{name, _return_reason}, effects_so_far, retries, false, [], on_compensation_error, tracers} = state
-    state = {effect, Map.put(effects_so_far, name, effect), retries, false, [], on_compensation_error, tracers}
+  defp handle_compensation_result(
+         {name, operation, {:continue, effect}, _compensated_effect,
+          state(last_effect_or_error: {name, _reason}, aborted?: false) = state}
+       ) do
+    state(effects_so_far: effects_so_far) = state
+    state = state(state, last_effect_or_error: effect, effects_so_far: Map.put(effects_so_far, name, effect))
     {:next_transaction, {name, operation}, state}
   end
 
@@ -338,91 +390,102 @@ defmodule Sage.Executor do
     {:next_compensation, {name, operation}, state}
   end
 
-  defp handle_compensation_result({name, operation, {:raise, _} = to_raise, compensated_effect, state}) do
-    state = put_elem(state, 0, to_raise)
+  defp handle_compensation_result({name, operation, {:raise, _} = error, compensated_effect, state}) do
+    state = state(state, last_effect_or_error: error)
     {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   defp handle_compensation_result({name, operation, {:exit, _reason} = error, compensated_effect, state}) do
-    state = put_elem(state, 0, error)
+    state = state(state, last_effect_or_error: error)
     {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   defp handle_compensation_result({name, operation, {:throw, _error} = error, compensated_effect, state}) do
-    state = put_elem(state, 0, error)
+    state = state(state, last_effect_or_error: error)
     {:compensation_error, {name, operation, compensated_effect}, state}
   end
 
   # Shared
 
-  defp execute_next_stage({:next_transaction, {name, operation}, state}, stages, executed_stages, opts) do
-    execute_transactions(stages, [{name, operation} | executed_stages], opts, state)
+  defp execute_next_stage({:next_transaction, {name, operation}, state}, stages, executed_stages, attrs) do
+    execute_transactions(stages, [{name, operation} | executed_stages], attrs, state)
   end
 
-  defp execute_next_stage({:next_transaction, state}, [], [{prev_name, _prev_op} | executed_stages], opts) do
-    {_last_effect_or_error, effects_so_far, _retries, _abort?, [], _on_compensation_error, _tracers} = state
-    state = put_elem(state, 0, Map.get(effects_so_far, prev_name))
-    execute_transactions([], executed_stages, opts, state)
+  defp execute_next_stage({:next_transaction, state}, [], [{prev_name, _prev_op} | executed_stages], attrs) do
+    state(effects_so_far: effects_so_far) = state
+    state = state(state, last_effect_or_error: Map.get(effects_so_far, prev_name))
+    execute_transactions([], executed_stages, attrs, state)
   end
 
-  defp execute_next_stage({:start_compensations, {name, operation}, state}, compensated_stages, stages, opts) do
-    execute_compensations(compensated_stages, [{name, operation} | stages], opts, state)
+  defp execute_next_stage({:start_compensations, {name, operation}, state}, compensated_stages, stages, attrs) do
+    execute_compensations(compensated_stages, [{name, operation} | stages], attrs, state)
   end
 
-  defp execute_next_stage({:start_compensations, state}, compensated_stages, stages, opts) do
-    execute_compensations(compensated_stages, stages, opts, state)
+  defp execute_next_stage({:start_compensations, state}, compensated_stages, stages, attrs) do
+    execute_compensations(compensated_stages, stages, attrs, state)
   end
 
-  defp execute_next_stage({:next_compensation, {name, operation}, state}, compensated_stages, stages, opts) do
-    execute_compensations([{name, operation} | compensated_stages], stages, opts, state)
+  defp execute_next_stage({:next_compensation, {name, operation}, state}, compensated_stages, stages, attrs) do
+    execute_compensations([{name, operation} | compensated_stages], stages, attrs, state)
   end
 
-  defp execute_next_stage({:retry_transaction, {name, operation}, state}, compensated_stages, stages, opts) do
-    execute_transactions([{name, operation} | compensated_stages], stages, opts, state)
+  defp execute_next_stage({:retry_transaction, {name, operation}, state}, compensated_stages, stages, attrs) do
+    execute_transactions([{name, operation} | compensated_stages], stages, attrs, state)
   end
 
-  defp execute_next_stage({:compensation_error, compensation_error, state}, _compensated_stages, stages, opts) do
+  defp execute_next_stage(
+         {:compensation_error, _compensation_error, state(on_compensation_error: :raise) = state},
+         _compensated_stages,
+         _stages,
+         _opts
+       ) do
+    state(last_effect_or_error: error) = state
+    return_or_reraise(error)
+  end
+
+  defp execute_next_stage({:compensation_error, compensation_error, state}, _compensated_stages, stages, attrs) do
+    state(
+      last_effect_or_error: error,
+      effects_so_far: effects_so_far,
+      on_compensation_error: on_compensation_error
+    ) = state
+
     {name, operation, compensated_effect} = compensation_error
-    {error, effects_so_far, _retries, _abort?, [], on_compensation_error, _tracers} = state
 
-    if on_compensation_error == :raise do
-      return_or_reraise(error)
-    else
-      compensations_to_run =
-        [{name, operation} | stages]
-        |> Enum.reduce([], fn
-          {_name, {_type, _transaction, :noop, _tx_opts}}, acc ->
-            acc
+    compensations_to_run =
+      [{name, operation} | stages]
+      |> Enum.reduce([], fn
+        {_name, {_type, _transaction, :noop, _tx_opts}}, acc ->
+          acc
 
-          {^name, {_type, _transaction, compensation, _tx_opts}}, acc ->
-            acc ++ [{name, compensation, compensated_effect}]
+        {^name, {_type, _transaction, compensation, _tx_opts}}, acc ->
+          acc ++ [{name, compensation, compensated_effect}]
 
-          {name, {_type, _transaction, compensation, _tx_opts}}, acc ->
-            acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
-        end)
+        {name, {_type, _transaction, compensation, _tx_opts}}, acc ->
+          acc ++ [{name, compensation, Map.fetch!(effects_so_far, name)}]
+      end)
 
-      _ =
-        Logger.warn("""
-        [Sage] compensation #{inspect(name)} failed to compensate effect:
+    _ =
+      Logger.warn("""
+      [Sage] compensation #{inspect(name)} failed to compensate effect:
 
-          #{inspect(compensated_effect)}
+        #{inspect(compensated_effect)}
 
-        #{compensation_error_message(error)}
-        """)
+      #{compensation_error_message(error)}
+      """)
 
-      case error do
-        {:raise, {exception, stacktrace}} ->
-          apply(on_compensation_error, :handle_error, [{:exception, exception, stacktrace}, compensations_to_run, opts])
+    case error do
+      {:raise, {exception, stacktrace}} ->
+        apply(on_compensation_error, :handle_error, [{:exception, exception, stacktrace}, compensations_to_run, attrs])
 
-        {:raise, exception} ->
-          apply(on_compensation_error, :handle_error, [{:exception, exception, []}, compensations_to_run, opts])
+      {:raise, exception} ->
+        apply(on_compensation_error, :handle_error, [{:exception, exception, []}, compensations_to_run, attrs])
 
-        {:exit, reason} ->
-          apply(on_compensation_error, :handle_error, [{:exit, reason}, compensations_to_run, opts])
+      {:exit, reason} ->
+        apply(on_compensation_error, :handle_error, [{:exit, reason}, compensations_to_run, attrs])
 
-        {:throw, error} ->
-          apply(on_compensation_error, :handle_error, [{:throw, error}, compensations_to_run, opts])
-      end
+      {:throw, error} ->
+        apply(on_compensation_error, :handle_error, [{:throw, error}, compensations_to_run, attrs])
     end
   end
 
@@ -467,18 +530,18 @@ defmodule Sage.Executor do
 
   defp maybe_notify_final_hooks(result, [], _opts), do: result
 
-  defp maybe_notify_final_hooks(result, filanlize_callbacks, opts) do
+  defp maybe_notify_final_hooks(result, filanlize_callbacks, attrs) do
     status = if elem(result, 0) == :ok, do: :ok, else: :error
 
     :ok =
       filanlize_callbacks
       |> Enum.map(fn
         {module, function, args} ->
-          args = [status, opts | args]
+          args = [status, attrs | args]
           {{module, function, args}, apply_and_catch_errors(module, function, args)}
 
         callback ->
-          args = [status, opts]
+          args = [status, attrs]
           {{callback, args}, apply_and_catch_errors(callback, args)}
       end)
       |> Enum.each(&maybe_log_errors/1)
