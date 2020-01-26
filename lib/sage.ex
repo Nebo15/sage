@@ -149,7 +149,7 @@ defmodule Sage do
   transaction itself fails. According a modern HTTP semantics, the `PUT` and `DELETE` verbs are idempotent.
   Also, some services [support idempotent requests via `idempotency keys`](https://stripe.com/blog/idempotency).
   """
-  @type transaction :: (effects_so_far :: effects(), execute_opts :: any() -> {:ok | :error | :abort, any()}) | mfa()
+  @type transaction :: (effects_so_far :: effects(), attrs :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
   defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
 
@@ -211,7 +211,7 @@ defmodule Sage do
   resort.
   """
   @type compensation ::
-          (effect_to_compensate :: any(), effects_so_far :: effects(), execute_opts :: any() ->
+          (effect_to_compensate :: any(), effects_so_far :: effects(), attrs :: any() ->
              :ok | :abort | {:retry, retry_opts :: retry_opts()} | {:continue, any()})
           | :noop
           | mfa()
@@ -226,7 +226,7 @@ defmodule Sage do
 
   Return is ignored.
   """
-  @type final_hook :: (:ok | :error, execute_opts :: any() -> no_return()) | mfa()
+  @type final_hook :: (:ok | :error, attrs :: any() -> no_return()) | mfa()
 
   defguardp is_final_hook(value) when is_function(value, 2) or (is_tuple(value) and tuple_size(value) == 3)
 

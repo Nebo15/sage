@@ -980,17 +980,17 @@ defmodule Sage.ExecutorTest do
 
   describe "global options" do
     test "are sent to transaction" do
-      execute_opts = %{foo: "bar"}
+      attrs = %{foo: "bar"}
 
       tx = fn effects_so_far, opts ->
-        assert opts == execute_opts
+        assert opts == attrs
         transaction(:t1).(effects_so_far, opts)
       end
 
       result =
         new()
         |> run(:step1, tx, compensation())
-        |> execute(execute_opts)
+        |> execute(attrs)
 
       assert result == {:ok, :t1, %{step1: :t1}}
 
@@ -998,35 +998,35 @@ defmodule Sage.ExecutorTest do
     end
 
     test "are sent to compensation" do
-      execute_opts = %{foo: "bar"}
+      attrs = %{foo: "bar"}
 
       cmp = fn effect_to_compensate, effects_so_far, opts ->
-        assert opts == execute_opts
+        assert opts == attrs
         compensation(:t1).(effect_to_compensate, effects_so_far, opts)
       end
 
       result =
         new()
         |> run(:step1, transaction_with_error(:t1), cmp)
-        |> execute(execute_opts)
+        |> execute(attrs)
 
       assert_no_effects()
       assert result == {:error, :t1}
     end
 
     test "are sent to final hook" do
-      execute_opts = %{foo: "bar"}
+      attrs = %{foo: "bar"}
 
       final_hook = fn state, opts ->
         assert state == :ok
-        assert opts == execute_opts
+        assert opts == attrs
       end
 
       result =
         new()
         |> run(:step1, transaction(:t1))
         |> finally(final_hook)
-        |> execute(execute_opts)
+        |> execute(attrs)
 
       assert_effects([:t1])
       assert result == {:ok, :t1, %{step1: :t1}}
