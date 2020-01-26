@@ -1,13 +1,13 @@
 defmodule Sage.Mixfile do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.6.0"
 
   def project do
     [
       app: :sage,
       version: @version,
-      elixir: "~> 1.6",
+      elixir: "~> 1.7",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [] ++ Mix.compilers(),
       build_embedded: Mix.env() == :prod,

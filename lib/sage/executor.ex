@@ -90,7 +90,7 @@ defmodule Sage.Executor do
         {name, {:exit, reason}}
 
       nil ->
-        {name, {:raise, {%Sage.AsyncTransactionTimeoutError{name: name, timeout: timeout}, System.stacktrace()}}}
+        {name, {:raise, %Sage.AsyncTransactionTimeoutError{name: name, timeout: timeout}}}
     end
   end
 
@@ -139,7 +139,7 @@ defmodule Sage.Executor do
   defp execute_transaction({:run, transaction, _compensation, []}, name, effects_so_far, opts) do
     apply_transaction_fun(name, transaction, effects_so_far, opts)
   rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
+    exception -> {:raise, {exception, __STACKTRACE__}}
   catch
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
@@ -169,8 +169,7 @@ defmodule Sage.Executor do
         {:abort, reason}
 
       other ->
-        {:raise,
-         {%Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}, System.stacktrace()}}
+        {:raise, %Sage.MalformedTransactionReturnError{stage: name, transaction: mfa, return: other}}
     end
   end
 
@@ -186,8 +185,7 @@ defmodule Sage.Executor do
         {:abort, reason}
 
       other ->
-        {:raise,
-         {%Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}, System.stacktrace()}}
+        {:raise, %Sage.MalformedTransactionReturnError{stage: name, transaction: fun, return: other}}
     end
   end
 
@@ -253,6 +251,7 @@ defmodule Sage.Executor do
     case last_error do
       {:exit, reason} -> {:exit, reason}
       {:raise, {exception, stacktrace}} -> {:raise, {exception, stacktrace}}
+      {:raise, exception} -> {:raise, exception}
       {:throw, reason} -> {:throw, reason}
       {_name, reason} -> {:error, reason}
     end
@@ -275,7 +274,7 @@ defmodule Sage.Executor do
   defp safe_apply_compensation_fun(name, compensation, effect_to_compensate, effects_so_far, opts) do
     apply_compensation_fun(compensation, effect_to_compensate, effects_so_far, opts)
   rescue
-    exception -> {:raise, {exception, System.stacktrace()}}
+    exception -> {:raise, {exception, __STACKTRACE__}}
   catch
     :exit, reason -> {:exit, reason}
     :throw, error -> {:throw, error}
@@ -293,8 +292,7 @@ defmodule Sage.Executor do
       {:continue, effect}
 
     other ->
-      exception_struct = %Sage.MalformedCompensationReturnError{stage: name, compensation: compensation, return: other}
-      {:raise, {exception_struct, System.stacktrace()}}
+      {:raise, %Sage.MalformedCompensationReturnError{stage: name, compensation: compensation, return: other}}
   end
 
   defp apply_compensation_fun({mod, fun, args}, effect_to_compensate, effects_so_far, opts),
@@ -416,6 +414,9 @@ defmodule Sage.Executor do
         {:raise, {exception, stacktrace}} ->
           apply(on_compensation_error, :handle_error, [{:exception, exception, stacktrace}, compensations_to_run, opts])
 
+        {:raise, exception} ->
+          apply(on_compensation_error, :handle_error, [{:exception, exception, []}, compensations_to_run, opts])
+
         {:exit, reason} ->
           apply(on_compensation_error, :handle_error, [{:exit, reason}, compensations_to_run, opts])
 
@@ -430,6 +431,15 @@ defmodule Sage.Executor do
     Because exception was raised:
 
       #{Exception.format(:error, exception, stacktrace)}
+
+    """
+  end
+
+  defp compensation_error_message({:raise, exception}) do
+    """
+    Because exception was raised:
+
+      #{Exception.format(:error, exception)}
 
     """
   end
@@ -524,6 +534,7 @@ defmodule Sage.Executor do
   defp return_or_reraise({:exit, reason}), do: exit(reason)
   defp return_or_reraise({:throw, reason}), do: throw(reason)
   defp return_or_reraise({:raise, {exception, stacktrace}}), do: filter_and_reraise(exception, stacktrace)
+  defp return_or_reraise({:raise, exception}), do: raise(exception)
   defp return_or_reraise({:error, reason}), do: {:error, reason}
 
   defp filter_and_reraise(exception, stacktrace) do
