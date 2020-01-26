@@ -209,12 +209,19 @@ defmodule SageTest do
     end
   end
 
-  describe "run_async/4" do
+  describe "run_async/5" do
     test "adds compensation via anonymous function to a sage" do
       tx = transaction(:t1)
       cmp = compensation()
       %Sage{stages: stages, stage_names: names} = run_async(new(), :step1, tx, cmp, timeout: 5_000)
       assert {:step1, {:run_async, tx, cmp, [timeout: 5_000]}} in stages
+      assert MapSet.member?(names, :step1)
+    end
+
+    test "adds noop compensation to a sage" do
+      tx = transaction(:t1)
+      %Sage{stages: stages, stage_names: names} = run_async(new(), :step1, tx, :noop, timeout: 5_000)
+      assert {:step1, {:run_async, tx, :noop, [timeout: 5_000]}} in stages
       assert MapSet.member?(names, :step1)
     end
 

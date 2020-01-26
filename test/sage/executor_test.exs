@@ -96,6 +96,20 @@ defmodule Sage.ExecutorTest do
     hook_assertion.()
   end
 
+  test "effects are not compensated for async operations with :noop compensation" do
+    {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
+
+    result =
+      new()
+      |> run_async(:step1, transaction_with_error(:t1), :noop)
+      |> finally(hook)
+      |> execute(a: :b)
+
+    assert_effects([:t1])
+    assert result == {:error, :t1}
+    hook_assertion.()
+  end
+
   test "asynchronous transactions process metadata is copied from parent process" do
     test_pid = self()
     metadata = [test_pid: test_pid, test_ref: make_ref()]

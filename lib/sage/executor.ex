@@ -258,7 +258,7 @@ defmodule Sage.Executor do
     end
   end
 
-  defp execute_compensation({{name, {:run, _transaction, :noop, _tx_opts} = operation}, state}, _opts) do
+  defp execute_compensation({{name, {_type, _transaction, :noop, _tx_opts} = operation}, state}, _opts) do
     {name, operation, :ok, nil, state}
   end
 
