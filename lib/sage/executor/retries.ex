@@ -11,16 +11,16 @@ defmodule Sage.Executor.Retries do
 
   Malformed retry options would be logged and ignored.
   """
-  @spec retry_with_backoff?(count :: pos_integer(), opts :: Sage.retry_opts()) :: boolean
-  def retry_with_backoff?(count, opts) do
+  @spec retry_with_backoff?(attempt :: pos_integer(), opts :: Sage.retry_opts()) :: boolean
+  def retry_with_backoff?(attempt, opts) do
     limit = Keyword.get(opts, :retry_limit)
 
-    if is_integer(limit) && limit > count do
+    if is_integer(limit) && limit > attempt do
       base_backoff = Keyword.get(opts, :base_backoff)
       max_backoff = Keyword.get(opts, :max_backoff, 5_000)
       jitter_enabled? = Keyword.get(opts, :enable_jitter, true)
 
-      backoff = get_backoff(count, base_backoff, max_backoff, jitter_enabled?)
+      backoff = get_backoff(attempt, base_backoff, max_backoff, jitter_enabled?)
       :ok = maybe_sleep(backoff)
       true
     else
@@ -29,28 +29,28 @@ defmodule Sage.Executor.Retries do
   end
 
   @spec get_backoff(
-          count :: pos_integer,
+          attempt :: pos_integer,
           base_backoff :: pos_integer() | nil,
           max_backoff :: pos_integer | nil,
           jitter_enabled :: boolean()
         ) :: non_neg_integer()
   @doc false
   # This function is public for testing purposes
-  def get_backoff(_count, nil, _max_backoff, _jitter_enabled?) do
+  def get_backoff(_attempt, nil, _max_backoff, _jitter_enabled?) do
     0
   end
 
-  def get_backoff(count, base_backoff, max_backoff, true)
+  def get_backoff(attempt, base_backoff, max_backoff, true)
       when is_integer(base_backoff) and base_backoff >= 1 and is_integer(max_backoff) and max_backoff >= 1 do
-    random(calculate_backoff(count, base_backoff, max_backoff))
+    random(calculate_backoff(attempt, base_backoff, max_backoff))
   end
 
-  def get_backoff(count, base_backoff, max_backoff, _jitter_enabled?)
+  def get_backoff(attempt, base_backoff, max_backoff, _jitter_enabled?)
       when is_integer(base_backoff) and base_backoff >= 1 and is_integer(max_backoff) and max_backoff >= 1 do
-    calculate_backoff(count, base_backoff, max_backoff)
+    calculate_backoff(attempt, base_backoff, max_backoff)
   end
 
-  def get_backoff(_count, base_backoff, max_backoff, _jitter_enabled?) do
+  def get_backoff(_attempt, base_backoff, max_backoff, _jitter_enabled?) do
     _ =
       Logger.warn(
         "[Sage] Ignoring retry backoff options, expected base_backoff and max_backoff to be integer and >= 1, got: " <>
@@ -60,8 +60,8 @@ defmodule Sage.Executor.Retries do
     0
   end
 
-  defp calculate_backoff(count, base_backoff, max_backoff),
-    do: min(max_backoff, trunc(:math.pow(base_backoff * 2, count)))
+  defp calculate_backoff(attempt, base_backoff, max_backoff),
+    do: min(max_backoff, trunc(:math.pow(base_backoff * 2, attempt)))
 
   defp random(n) when is_integer(n) and n > 0, do: :rand.uniform(n) - 1
   defp random(n) when is_integer(n), do: 0
