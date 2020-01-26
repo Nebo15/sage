@@ -166,7 +166,7 @@ defmodule Sage do
 
     * `:ok` if effect is compensated, Sage will continue to compensate other effects;
     * `:abort` if effect is compensated but should not be created again, \
-    Sage will compensate other effects and ignore all retries;
+    Sage will compensate other effects and ignore retries on any stages;
     * `{:retry, retry_opts}` if effect is compensated but transaction can be retried with options `retry_opts`;
     * `{:continue, effect}` if effect is compensated and execution can be retried with other effect \
     to replace the transaction return. This allows to implement circuit breaker.
