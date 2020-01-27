@@ -38,6 +38,6 @@ matrix:
         - "mix dialyzer"
 script:
   # Run all tests except pending ones
-  - "mix test --exclude pending --trace"
+  - "mix test --exclude pending"
 after_script:
 # Keep it empty in order for matrix override to work
