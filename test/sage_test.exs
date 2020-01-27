@@ -83,19 +83,31 @@ defmodule SageTest do
     test "executes the sage" do
       sage = new() |> run(:step1, fn %{}, [] -> {:ok, :t1} end)
       assert transaction(sage, TestRepo) == {:ok, :t1, %{step1: :t1}}
-      assert_receive {:transaction, _fun}
+      assert_receive {:transaction, _fun, []}
+    end
+
+    test "accepts execute attrs" do
+      sage = new() |> run(:step1, fn %{}, foo: :bar -> {:ok, :t1} end)
+      assert transaction(sage, TestRepo, foo: :bar) == {:ok, :t1, %{step1: :t1}}
+      assert_receive {:transaction, _fun, []}
+    end
+
+    test "accepts transaction options" do
+      sage = new() |> run(:step1, fn %{}, [] -> {:ok, :t1} end)
+      assert transaction(sage, TestRepo, [], foo: :bar) == {:ok, :t1, %{step1: :t1}}
+      assert_receive {:transaction, _fun, foo: :bar}
     end
 
     test "executes the sage with opts" do
       sage = new() |> run(:step1, fn %{}, foo: "bar" -> {:ok, :t1} end)
       assert transaction(sage, TestRepo, foo: "bar") == {:ok, :t1, %{step1: :t1}}
-      assert_receive {:transaction, _fun}
+      assert_receive {:transaction, _fun, []}
     end
 
     test "rollbacks transaction on errors" do
       sage = new() |> run(:step1, fn %{}, [] -> {:error, :foo_bar} end)
       assert transaction(sage, TestRepo) == {:error, :foo_bar}
-      assert_receive {:transaction, _fun}
+      assert_receive {:transaction, _fun, []}
     end
 
     test "raises when there are no stages to execute" do
@@ -105,7 +117,7 @@ defmodule SageTest do
         transaction(sage, TestRepo)
       end
 
-      assert_receive {:transaction, _fun}
+      assert_receive {:transaction, _fun, []}
     end
   end
 

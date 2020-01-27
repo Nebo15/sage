@@ -1,6 +1,6 @@
 defmodule TestRepo do
-  def transaction(fun) do
-    send(self(), {:transaction, fun})
+  def transaction(fun, opts) do
+    send(self(), {:transaction, fun, opts})
     {:ok, fun.()}
   end
 
