@@ -43,7 +43,7 @@ defmodule Sage.Mixfile do
     [
       {:ex_doc, ">= 0.16.0", only: [:dev, :test]},
       {:excoveralls, ">= 0.7.0", only: [:dev, :test]},
-      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:inch_ex, ">= 0.0.0", only: :test}
     ]
   end
