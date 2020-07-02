@@ -1063,6 +1063,37 @@ defmodule Sage.ExecutorTest do
       assert result == {:ok, :t3, %{step1: :t1, step2: :t2, step3: :t3}}
     end
 
+    test "uses previous stage effects" do
+      {hook, hook_assertion} = final_hook_with_assertion(:ok, a: :b)
+
+      test_pid = self()
+      tx = transaction(:t3)
+
+      tx = fn effects_so_far, opts ->
+        send(test_pid, {:execute, :t3})
+        tx.(effects_so_far, opts)
+      end
+
+      result =
+        new()
+        |> run(:step1, transaction(:t1), compensation())
+        |> run(:step2, transaction(:t2), compensation_with_retry(3))
+        |> run(:step3, tx, compensation())
+        |> run(:step4, transaction_with_n_errors(2, :t4), compensation())
+        |> finally(hook)
+        |> execute(a: :b)
+
+      assert_receive {:execute, :t3}
+      assert_receive {:execute, :t3}
+      assert_receive {:execute, :t3}
+
+      hook_assertion.()
+
+      # Regression test, assert that step1 is not discarded
+      assert_effects([:t1, :t2, :t3, :t4])
+      assert result == {:ok, :t4, %{step1: :t1, step2: :t2, step3: :t3, step4: :t4}}
+    end
+
     test "are ignored when retry limit exceeded" do
       {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
       test_pid = self()

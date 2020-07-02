@@ -370,7 +370,7 @@ defmodule Sage.Executor do
     state(attempts: attempts) = state
 
     if Retries.retry_with_backoff?(attempts, retry_opts) do
-      state = state(attempts: attempts + 1)
+      state = state(state, attempts: attempts + 1)
       {:retry_transaction, {name, operation}, state}
     else
       {:next_compensation, {name, operation}, state}
