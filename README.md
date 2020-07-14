@@ -350,4 +350,4 @@ Sagas idea have origins from [whitepaper](http://www.cs.cornell.edu/andru/cs711/
 
  - Josh Forisha for letting me to use this awesome project name on hex.pm (he had a package with that name);
  - @michalmuskala, @alco and @alecnmk for giving feedback and ideas along my way;
- - all the Elixir community and Core Team. Guys, you are awesome ❤️.
+ - all the Elixir community and Core Team: you are awesome ❤️.
