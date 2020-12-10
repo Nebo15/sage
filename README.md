@@ -329,7 +329,7 @@ The package can be installed by adding [`sage`](https://hex.pm/packages/sage) to
 ```elixir
 def deps do
   [
-    {:sage, "~> 0.4.0"}
+    {:sage, ">= 0.6.0"}
   ]
 end
 ```
