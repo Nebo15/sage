@@ -22,7 +22,7 @@ defmodule Sage do
   ### For Compensations
 
   By default, compensations are not protected from critical errors and would raise an exception.
-  This is done to keep simplicity and follow "let it fall" pattern of the language,
+  This is done to keep simplicity and follow "let it fail" pattern of the language,
   thinking that this kind of errors should be logged and then manually investigated by a developer.
 
   But if that's not enough for you, it is possible to register handler via `with_compensation_error_handler/2`.
