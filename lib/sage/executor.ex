@@ -530,11 +530,11 @@ defmodule Sage.Executor do
 
   defp maybe_notify_final_hooks(result, [], _opts), do: result
 
-  defp maybe_notify_final_hooks(result, filanlize_callbacks, attrs) do
+  defp maybe_notify_final_hooks(result, finalize_callbacks, attrs) do
     status = if elem(result, 0) == :ok, do: :ok, else: :error
 
     :ok =
-      filanlize_callbacks
+      finalize_callbacks
       |> Enum.map(fn
         {module, function, args} ->
           args = [status, attrs | args]
