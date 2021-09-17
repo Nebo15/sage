@@ -62,7 +62,7 @@ defmodule Sage.Mixfile do
   defp docs do
     [
       main: "readme",
-      source_ref: "v#\{@version\}",
+      source_ref: @version,
       source_url: "https://github.com/Nebo15/sage",
       extras: ["README.md"]
     ]
