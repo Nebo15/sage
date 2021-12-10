@@ -1,6 +1,7 @@
 defmodule Sage.Mixfile do
   use Mix.Project
 
+  @source_url "https://github.com/Nebo15/sage"
   @version "0.6.1"
 
   def project do
@@ -41,7 +42,7 @@ defmodule Sage.Mixfile do
 
   defp deps do
     [
-      {:ex_doc, ">= 0.16.0", only: [:dev, :test]},
+      {:ex_doc, ">= 0.0.0", only: [:dev, :test]},
       {:excoveralls, ">= 0.7.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:inch_ex, ">= 0.0.0", only: :test}
@@ -52,19 +53,22 @@ defmodule Sage.Mixfile do
     [
       contributors: ["Nebo #15"],
       maintainers: ["Nebo #15"],
-      source_ref: "v#{@version}",
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/Nebo15/sage"},
-      files: ~w(mix.exs .formatter.exs lib LICENSE.md README.md)
+      files: ~w(mix.exs .formatter.exs lib LICENSE.md README.md),
+      links: %{"GitHub" => @source_url}
     ]
   end
 
   defp docs do
     [
+      extras: [
+        "LICENSE.md": [title: "License"],
+        "README.md": [title: "Overview"]
+      ],
       main: "readme",
+      source_url: @source_url,
       source_ref: @version,
-      source_url: "https://github.com/Nebo15/sage",
-      extras: ["README.md"]
+      formatters: ["html"]
     ]
   end
 end
