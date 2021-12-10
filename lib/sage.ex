@@ -77,7 +77,7 @@ defmodule Sage do
   Retry options.
 
   Retry count for all a sage execution is shared and stored internally,
-  so even trough you can increase retry limit - retry count would be
+  so even through you can increase retry limit - retry count would be
   never reset to make sure that execution would not be retried infinitely.
 
   Available retry options:
@@ -176,7 +176,7 @@ defmodule Sage do
   After receiving a circuit breaker response Sage will continue executing transactions by using returned effect.
 
   Circuit breaking is only allowed if compensation function that returns it is responsible for the failed transaction
-  (they both are parts of for the same execution step). Otherwise curcuit breaker would be ignored and Sage will
+  (they both are parts of for the same execution step). Otherwise circuit breaker would be ignored and Sage will
   continue applying backward recovery.
 
   The circuit breaker should use data which is local to the sage execution, preferably from list of options

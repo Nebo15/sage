@@ -805,7 +805,7 @@ defmodule Sage.ExecutorTest do
       hook_assertion.()
     end
 
-    test "does not execute predecessors compensations when exeception is raised and no error handler" do
+    test "does not execute predecessors compensations when exception is raised and no error handler" do
       sage =
         new()
         |> run(:step1, transaction(:t1), compensation())

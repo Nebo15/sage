@@ -198,7 +198,7 @@ defmodule SageTest do
       end
     end
 
-    test "wont raise when on similar tuple names" do
+    test "won't raise when on similar tuple names" do
       tx = transaction(:t1)
 
       %Sage{stages: stages, stage_names: names} =
