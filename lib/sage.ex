@@ -407,6 +407,12 @@ defmodule Sage do
   Transaction is rolled back on error.
 
   Ecto must be included as application dependency if you want to use this function.
+  
+  ## Async Stages
+  
+  If you are using `run_async/5` with `transaction/4` the code that is run in async stages would
+  not reuse the same database connection, which menas that if transaction is rolled back the effects
+  of async stages should still be rolled back manually.
   """
   @doc since: "0.3.3"
   @spec transaction(sage :: t(), repo :: module(), opts :: any(), transaction_opts :: any()) ::
