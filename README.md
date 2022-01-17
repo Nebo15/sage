@@ -1,6 +1,12 @@
 # Sage
 
-[![Inline docs](http://inch-ci.org/github/nebo15/sage.svg)](http://inch-ci.org/github/nebo15/sage) [![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage) [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master) [![Ebert](https://ebertapp.io/github/Nebo15/sage.svg)](https://ebertapp.io/github/Nebo15/sage)
+[![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage)
+[![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master)
+[![Module Version](https://img.shields.io/hexpm/v/sage.svg)](https://hex.pm/packages/sage)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/sage/)
+[![Total Download](https://img.shields.io/hexpm/dt/sage.svg)](https://hex.pm/packages/sage)
+[![License](https://img.shields.io/hexpm/l/sage.svg)](https://github.com/Nebo15/sage/blob/master/LICENSE.md)
+[![Last Updated](https://img.shields.io/github/last-commit/Nebo15/sage.svg)](https://github.com/Nebo15/sage/commits/master)
 
 Sage is a dependency-free implementation of the [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir and provides a set of additional built-in features.
 
@@ -10,7 +16,7 @@ successfully completed, or compensating that all of the transactions did run to 
 
 > It’s like `Ecto.Multi` but across business logic and third-party APIs.
 >
-> -- <cite>@jayjun</cite>
+> -- [@jayjun](https://github.com/jayjun)
 
 This is done by defining two way flow with transaction and compensation functions. When one of the transactions fails, Sage will ensure that the transaction's and all of its predecessors' compensations are executed. However, it's important to note that Sage can not protect you from a node failure that executes given Sage.
 
@@ -292,7 +298,6 @@ If an error is raised within tracing function, it's getting logged and ignored.
 In order to make it easier to understand what flow you should expect, here are a few additional examples:
 
 1. Retries
-
 ```
 [T1] -> [T2] -> [T3 has an error]
                 ↓
@@ -324,7 +329,7 @@ In order to make it easier to understand what flow you should expect, here are a
 
 ## Installation
 
-The package can be installed by adding [`sage`](https://hex.pm/packages/sage) to your list of dependencies in `mix.exs`:
+The package can be installed by adding [`:sage`](https://hex.pm/packages/sage) to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
@@ -335,10 +340,6 @@ end
 ```
 
 Documentation can be found at [https://hexdocs.pm/sage](https://hexdocs.pm/sage).
-
-# License
-
-See [LICENSE.md](LICENSE.md).
 
 # Credits
 
@@ -351,3 +352,11 @@ Sagas idea have origins from [whitepaper](http://www.cs.cornell.edu/andru/cs711/
  - Josh Forisha for letting me to use this awesome project name on hex.pm (he had a package with that name);
  - @michalmuskala, @alco and @alecnmk for giving feedback and ideas along my way;
  - all the Elixir community and Core Team: you are awesome ❤️.
+
+
+## Copyright and License
+
+Copyright (c) 2016 Nebo #15
+
+This work is free. You can redistribute it and/or modify it under the
+terms of the MIT License. See the [LICENSE.md](./LICENSE.md) file for more details.
