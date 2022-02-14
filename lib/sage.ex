@@ -299,7 +299,10 @@ defmodule Sage do
   but it won't affect Sage execution.
 
   Tracer can be a module that must implement `Sage.Tracer` behaviour,
-  a function, or a tuple in a shape of `{module, function, [arguments]}`.
+  a function, or a tuple in a shape of `{module, function, [extra_arguments]}`. 
+  
+  In any case, the function called should follow the definition of `c:Sage.Tracer.handle_event/3`
+  and accept at least 3 required arguments that are documented by the callback.
 
   For more information see `c:Sage.Tracer.handle_event/3`.
   """
