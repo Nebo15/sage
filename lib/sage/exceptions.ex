@@ -56,10 +56,10 @@ defmodule Sage.DuplicateTracerError do
   @impl true
   def exception(opts) do
     sage = Keyword.fetch!(opts, :sage)
-    module = Keyword.fetch!(opts, :module)
+    value = Keyword.fetch!(opts, :value)
 
     message = """
-    #{inspect(module)} is already defined as tracer for Sage:
+    #{inspect(value)} is already defined as tracer for Sage:
 
       #{inspect(sage)}
     """

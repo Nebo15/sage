@@ -154,6 +154,17 @@ defmodule Sage do
   defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
 
   @typedoc """
+  Tracer callback, can be a module that implements `Sage.Tracer` behaviour, an anonymous function, or an
+  `{module, function, [arguments]}` tuple.
+
+  The tracer callback is called before and after each transaction or compensation. Read `Sage.Tracer` for
+  more details.
+  """
+  @type tracer :: (stage_name(), Sage.Tracer.action(), state :: any() -> any()) | module() | mfa()
+
+  defguardp is_tracer(value) when is_function(value, 3) or is_mfa(value) or is_atom(value)
+
+  @typedoc """
   Compensation callback, can either anonymous function or an `{module, function, [arguments]}` tuple.
 
   Receives:
@@ -279,7 +290,7 @@ defmodule Sage do
   end
 
   @doc """
-  Registers tracer for a Sage execution.
+  Registers a tracer for a Sage execution.
 
   Registering duplicated tracing callback is not allowed and would raise an
   `Sage.DuplicateTracerError` exception.
@@ -287,18 +298,20 @@ defmodule Sage do
   All errors during execution of a tracing callbacks would be logged,
   but it won't affect Sage execution.
 
-  Tracing module must implement `Sage.Tracer` behaviour.
+  Tracer can be a module that must implement `Sage.Tracer` behaviour,
+  a function, or a tuple in a shape of `{module, function, [arguments]}`.
+
   For more information see `c:Sage.Tracer.handle_event/3`.
   """
-  @spec with_tracer(sage :: t(), module :: module()) :: t()
-  def with_tracer(%Sage{} = sage, module) when is_atom(module) do
+  @spec with_tracer(sage :: t(), value :: tracer()) :: t()
+  def with_tracer(%Sage{} = sage, value) when is_tracer(value) do
     %{tracers: tracers} = sage
 
-    if MapSet.member?(tracers, module) do
-      raise Sage.DuplicateTracerError, sage: sage, module: module
+    if MapSet.member?(tracers, value) do
+      raise Sage.DuplicateTracerError, sage: sage, value: value
     end
 
-    %{sage | tracers: MapSet.put(tracers, module)}
+    %{sage | tracers: MapSet.put(tracers, value)}
   end
 
   @doc """
@@ -407,9 +420,9 @@ defmodule Sage do
   Transaction is rolled back on error.
 
   Ecto must be included as application dependency if you want to use this function.
-  
+
   ## Async Stages
-  
+
   If you are using `run_async/5` with `transaction/4` the code that is run in async stages would
   not reuse the same database connection, which menas that if transaction is rolled back the effects
   of async stages should still be rolled back manually.
