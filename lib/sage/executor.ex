@@ -521,8 +521,15 @@ defmodule Sage.Executor do
 
   defp maybe_notify_tracers({tracers, tracing_state}, action, name) do
     tracing_state =
-      Enum.reduce(tracers, tracing_state, fn tracer, tracing_state ->
-        apply_and_catch_errors(tracer, :handle_event, [name, action, tracing_state])
+      Enum.reduce(tracers, tracing_state, fn
+        callback, tracing_state when is_function(callback) ->
+          apply_and_catch_errors(callback, [name, action, tracing_state])
+
+        {module, function, args}, tracing_state ->
+          apply_and_catch_errors(module, function, [name, action, tracing_state | args])
+
+        tracer_module, tracing_state ->
+          apply_and_catch_errors(tracer_module, :handle_event, [name, action, tracing_state])
       end)
 
     {tracers, tracing_state}
