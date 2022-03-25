@@ -197,7 +197,7 @@ Along with a readable code, you are getting:
 
 - Reasonable guarantees that all transaction steps are completed or all failed steps are compensated;
 - Code which is much simpler and easier to test a code;
-- Retries, circuit breaking and asynchronous requests our of the box;
+- Retries, circuit breaking and asynchronous requests out of the box;
 - Declarative way to define your transactions and run them.
 
 Testing is easier, because instead of one monstrous function you will have many small callbacks which are easy to cover
