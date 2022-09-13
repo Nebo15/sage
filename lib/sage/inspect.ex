@@ -20,8 +20,21 @@ defimpl Inspect, for: Sage do
   end
 
   defp format_stage({name, operation}) do
-    name = "#{Atom.to_string(name)}: "
+    name = format_stage_name(name)
     group(concat([name, nest(build_operation(operation), String.length(name))]))
+  end
+
+  defp format_stage_name(name) when is_atom(name) do
+    "#{Atom.to_string(name)}: "
+  end
+
+  defp format_stage_name(name) when is_tuple(name) do
+    joined_string =
+      name
+      |> Tuple.to_list()
+      |> Enum.join(", ")
+
+    "{#{joined_string}}: "
   end
 
   defp build_operation({kind, transaction, compensation, tx_opts}) do
