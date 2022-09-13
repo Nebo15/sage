@@ -83,6 +83,26 @@ defmodule Sage.InspectTest do
     assert inspect(sage) == "#Sage(with Sage.TestCompensationErrorHandler)<>"
   end
 
+  test "can inspect tuple stage names" do
+    fun = fn _, _ -> {:ok, nil} end
+
+    sage =
+      for i <- 1..3, reduce: new() do
+        sage ->
+          run(sage, {:step, i}, fun)
+      end
+
+    string = """
+    #Sage<
+      {step, 1}: -> #{inspect(fun)},
+      {step, 2}: -> #{inspect(fun)},
+      {step, 3}: -> #{inspect(fun)}
+    >
+    """
+
+    assert i(sage) == String.trim(string)
+  end
+
   def i(%{on_compensation_error: :raise} = sage) do
     inspect(sage, limit: 50, printable_limit: 4096, width: 80, pretty: true)
   end
