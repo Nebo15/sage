@@ -334,7 +334,7 @@ The package can be installed by adding [`:sage`](https://hex.pm/packages/sage) t
 ```elixir
 def deps do
   [
-    {:sage, ">= 0.6.0"}
+    {:sage, "~> 0.6.2"}
   ]
 end
 ```
