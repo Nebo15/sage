@@ -300,7 +300,7 @@ defmodule Sage do
 
   Tracer can be a module that must implement `Sage.Tracer` behaviour,
   a function, or a tuple in a shape of `{module, function, [extra_arguments]}`. 
-  
+
   In any case, the function called should follow the definition of `c:Sage.Tracer.handle_event/3`
   and accept at least 3 required arguments that are documented by the callback.
 
@@ -427,8 +427,8 @@ defmodule Sage do
   ## Async Stages
 
   If you are using `run_async/5` with `transaction/4` the code that is run in async stages would
-  not reuse the same database connection, which menas that if transaction is rolled back the effects
-  of async stages should still be rolled back manually.
+  not reuse the same database connection, which means that if the transaction is rolled back the
+  effects of async stages should still be rolled back manually.
   """
   @doc since: "0.3.3"
   @spec transaction(sage :: t(), repo :: module(), opts :: any(), transaction_opts :: any()) ::
