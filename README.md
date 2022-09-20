@@ -1,12 +1,11 @@
 # Sage
 
-[![Build Status](https://travis-ci.org/Nebo15/sage.svg?branch=master)](https://travis-ci.org/Nebo15/sage)
+[![Elixir](https://github.com/Nebo15/sage/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Nebo15/sage/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/Nebo15/sage/badge.svg?branch=master)](https://coveralls.io/github/Nebo15/sage?branch=master)
 [![Module Version](https://img.shields.io/hexpm/v/sage.svg)](https://hex.pm/packages/sage)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/sage/)
 [![Total Download](https://img.shields.io/hexpm/dt/sage.svg)](https://hex.pm/packages/sage)
 [![License](https://img.shields.io/hexpm/l/sage.svg)](https://github.com/Nebo15/sage/blob/master/LICENSE.md)
-[![Last Updated](https://img.shields.io/github/last-commit/Nebo15/sage.svg)](https://github.com/Nebo15/sage/commits/master)
 
 Sage is a dependency-free implementation of the [Sagas](http://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf) pattern in pure Elixir and provides a set of additional built-in features.
 

@@ -1,0 +1,41 @@
+name: Elixir Dialyzer
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and run Dialyzer
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - otp-version: 25.0
+            elixir-version: 1.14.0
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Elixir
+      uses: erlef/setup-beam@988e02bfe678367a02564f65ca2e37726dc0268f
+      with:
+        elixir-version: ${{ matrix.elixir-version }}
+        otp-version: ${{ matrix.otp-version }}
+    - name: Restore Dialyzer PLT cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          deps
+          _build
+        key: plt-${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}-elixir-${{ matrix.elixir-version }}-otp-${{ matrix.otp-version }}
+    - name: Install and compile dependencies
+      run: mix do deps.get, deps.compile
+    - name: Build Dialyzer PLT 
+      run: mix dialyzer --plt
+    - name: Type check
+      run: mix dialyzer
+    
