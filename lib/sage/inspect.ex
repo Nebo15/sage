@@ -20,7 +20,7 @@ defimpl Inspect, for: Sage do
   end
 
   defp format_stage({name, operation}) do
-    name = "#{Atom.to_string(name)}: "
+    name = inspect(name) <> " "
     group(concat([name, nest(build_operation(operation), String.length(name))]))
   end
 

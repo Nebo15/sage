@@ -15,42 +15,42 @@ defmodule Sage.InspectTest do
       |> run(:step4, {__MODULE__, :transaction, [:foo, :bar]}, cmp)
       |> run(:step5, {__MODULE__, :transaction, []}, cmp)
       |> run(:step6, tx, {__MODULE__, :compensation, [:foo, :bar]})
-      |> run(:step7, tx, {__MODULE__, :compensation, []})
+      |> run({:step, 7}, tx, {__MODULE__, :compensation, []})
 
     string =
       if Version.compare("1.6.0", System.version()) in [:lt, :eq] do
         """
         #Sage<
-          step1: -> #{inspect(tx)},
-          step2: -> #{inspect(tx)}
+          :step1 -> #{inspect(tx)},
+          :step2 -> #{inspect(tx)}
                  <- #{inspect(cmp)},
-          step3: -> #{inspect(tx)} (async) [timeout: 5000]
+          :step3 -> #{inspect(tx)} (async) [timeout: 5000]
                  <- #{inspect(cmp)},
-          step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
+          :step4 -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
                  <- #{inspect(cmp)},
-          step5: -> Sage.InspectTest.transaction/2
+          :step5 -> Sage.InspectTest.transaction/2
                  <- #{inspect(cmp)},
-          step6: -> #{inspect(tx)}
+          :step6 -> #{inspect(tx)}
                  <- Sage.InspectTest.compensation(effect_to_compensate, opts, :foo, :bar),
-          step7: -> #{inspect(tx)}
-                 <- Sage.InspectTest.compensation/2
+          {:step, 7} -> #{inspect(tx)}
+                     <- Sage.InspectTest.compensation/2
         >
         """
       else
         """
-        #Sage<step1: -> #{inspect(tx)},
-         step2: -> #{inspect(tx)}
+        #Sage<:step1 -> #{inspect(tx)},
+         :step2 -> #{inspect(tx)}
                 <- #{inspect(cmp)},
-         step3: -> #{inspect(tx)} (async) [timeout: 5000]
+         :step3 -> #{inspect(tx)} (async) [timeout: 5000]
                 <- #{inspect(cmp)},
-         step4: -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
+         :step4 -> Sage.InspectTest.transaction(effects_so_far, opts, :foo, :bar)
                 <- #{inspect(cmp)},
-         step5: -> Sage.InspectTest.transaction/2
+         :step5 -> Sage.InspectTest.transaction/2
                 <- #{inspect(cmp)},
-         step6: -> #{inspect(tx)}
+         :step6 -> #{inspect(tx)}
                 <- Sage.InspectTest.compensation(effect_to_compensate, opts, :foo, :bar),
-         step7: -> #{inspect(tx)}
-                <- Sage.InspectTest.compensation/2>
+         {:step, 7} -> #{inspect(tx)}
+                    <- Sage.InspectTest.compensation/2>
         """
       end
 
