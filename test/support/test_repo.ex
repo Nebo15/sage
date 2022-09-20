@@ -1,7 +1,11 @@
 defmodule TestRepo do
   def transaction(fun, opts) do
     send(self(), {:transaction, fun, opts})
-    {:ok, fun.()}
+
+    case fun.() do
+      {:error, reason} -> {:error, reason}
+      result -> {:ok, result}
+    end
   end
 
   def rollback(error) do

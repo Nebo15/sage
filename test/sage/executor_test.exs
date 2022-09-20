@@ -915,7 +915,7 @@ defmodule Sage.ExecutorTest do
       end
     end
 
-    test "funcions are notified for all operations" do
+    test "functions are notified for all operations" do
       result =
         new()
         |> run(:step1, transaction(:t1), compensation())
