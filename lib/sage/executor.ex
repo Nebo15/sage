@@ -560,7 +560,7 @@ defmodule Sage.Executor do
   defp apply_and_catch_errors(module, function, arguments) do
     apply(module, function, arguments)
   catch
-    :error, exception -> {:raise, {exception, System.stacktrace()}}
+    :error, exception -> {:raise, {exception, __STACKTRACE__}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end
@@ -568,7 +568,7 @@ defmodule Sage.Executor do
   defp apply_and_catch_errors(function, arguments) do
     apply(function, arguments)
   catch
-    :error, exception -> {:raise, {exception, System.stacktrace()}}
+    :error, exception -> {:raise, {exception, __STACKTRACE__}}
     :exit, reason -> {:exit, reason}
     :throw, reason -> {:throw, reason}
   end

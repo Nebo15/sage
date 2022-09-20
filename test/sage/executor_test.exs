@@ -1313,7 +1313,7 @@ defmodule Sage.ExecutorTest do
       try do
         execute(sage)
       rescue
-        _exception -> System.stacktrace()
+        _exception -> __STACKTRACE__
       end
 
     assert [
