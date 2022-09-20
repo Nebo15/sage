@@ -104,6 +104,26 @@ defmodule Sage.ExecutorTest do
     assert [Sage.MyTestSupervisor | _rest] = ancestors
   end
 
+  test "async steps use the defualt supervisor if none is supplied" do
+    test_process = self()
+    ref = make_ref()
+
+    step = fn _, _ ->
+      ancestors = Process.info(self()) |> Keyword.fetch!(:dictionary) |> Keyword.fetch!(:"$ancestors")
+      send(test_process, {ref, ancestors})
+      {:ok, :ok}
+    end
+
+    new()
+    |> run_async(:step1, step, :noop)
+    |> execute(1)
+
+    # The async task will be awaited as it's the last step in the pipeline meaning
+    # there's no chance that we reach here _before_ the send has happened (causing a flaky test)
+    assert_received({^ref, ancestors}, 1_000)
+    assert [Sage.AsyncTransactionSupervisor | _rest] = ancestors
+  end
+
   test "effects are not compensated for operations with :noop compensation" do
     {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
 
