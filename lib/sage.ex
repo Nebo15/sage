@@ -95,7 +95,7 @@ defmodule Sage do
     * `:max_backoff` - is the maximum backoff value, default: `5_000` ms.;
     * `:enable_jitter` - whatever jitter is applied to backoff value, default: `true`;
 
-  Sage will log and give up retrying if options are invalid.
+  Sage will log an error and give up retrying if options are invalid.
 
   ## Backoff calculation
 
@@ -158,7 +158,8 @@ defmodule Sage do
   transaction itself fails. According a modern HTTP semantics, the `PUT` and `DELETE` verbs are idempotent.
   Also, some services [support idempotent requests via `idempotency keys`](https://stripe.com/blog/idempotency).
   """
-  @type transaction :: (effects_so_far :: effects(), attrs :: any() -> {:ok | :error | :abort, any()}) | mfa()
+  @type transaction ::
+          (effects_so_far :: effects(), attrs :: any() -> {:ok | :error | :abort, any()}) | mfa()
 
   defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
 
@@ -248,7 +249,8 @@ defmodule Sage do
   """
   @type final_hook :: (:ok | :error, attrs :: any() -> no_return()) | mfa()
 
-  defguardp is_final_hook(value) when is_function(value, 2) or (is_tuple(value) and tuple_size(value) == 3)
+  defguardp is_final_hook(value)
+            when is_function(value, 2) or (is_tuple(value) and tuple_size(value) == 3)
 
   @typep operation :: {:run | :run_async, transaction(), compensation(), Keyword.t()}
 
@@ -360,7 +362,12 @@ defmodule Sage do
   If transaction does not produce effect to compensate, pass `:noop` instead of compensation
   callback or use `run/3`.
   """
-  @spec run(sage :: t(), name :: stage_name(), transaction :: transaction(), compensation :: compensation()) :: t()
+  @spec run(
+          sage :: t(),
+          name :: stage_name(),
+          transaction :: transaction(),
+          compensation :: compensation()
+        ) :: t()
   def run(sage, name, transaction, compensation),
     do: add_stage(sage, name, build_operation!(:run, transaction, compensation))
 
@@ -446,7 +453,8 @@ defmodule Sage do
 
   Raises `Sage.EmptyError` if Sage does not have any transactions.
   """
-  @spec execute(sage :: t(), opts :: any()) :: {:ok, result :: any(), effects :: effects()} | {:error, any()}
+  @spec execute(sage :: t(), opts :: any()) ::
+          {:ok, result :: any(), effects :: effects()} | {:error, any()}
   defdelegate execute(sage, opts \\ []), to: Sage.Executor
 
   @doc false

@@ -52,7 +52,7 @@ defmodule Sage.Executor.Retries do
 
   def get_backoff(_attempt, base_backoff, max_backoff, _jitter_enabled?) do
     _ =
-      Logger.warn(
+      Logger.error(
         "[Sage] Ignoring retry backoff options, expected base_backoff and max_backoff to be integer and >= 1, got: " <>
           "base_backoff: #{inspect(base_backoff)}, max_backoff: #{inspect(max_backoff)}"
       )
