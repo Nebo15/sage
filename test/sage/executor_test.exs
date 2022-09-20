@@ -98,9 +98,7 @@ defmodule Sage.ExecutorTest do
     |> run_async(:step1, step, :noop, supervisor: supervisor)
     |> execute(1)
 
-    # The async task will be awaited as it's the last step in the pipeline meaning
-    # there's no chance that we reach here _before_ the send has happened (causing a flaky test)
-    assert_received({^ref, ancestors}, 1_000)
+    assert_receive({^ref, ancestors})
     assert [Sage.MyTestSupervisor | _rest] = ancestors
   end
 
@@ -118,9 +116,7 @@ defmodule Sage.ExecutorTest do
     |> run_async(:step1, step, :noop)
     |> execute(1)
 
-    # The async task will be awaited as it's the last step in the pipeline meaning
-    # there's no chance that we reach here _before_ the send has happened (causing a flaky test)
-    assert_received({^ref, ancestors}, 1_000)
+    assert_receive({^ref, ancestors})
     assert [Sage.AsyncTransactionSupervisor | _rest] = ancestors
   end
 
