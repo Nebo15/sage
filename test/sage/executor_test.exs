@@ -656,13 +656,13 @@ defmodule Sage.ExecutorTest do
     end
 
     error_prone_compensation = fn _effect_to_compensate, _effects_so_far, _opts ->
-      :unknown_module.call(:arg)
+      foo(:buz)
 
       :ok
     end
 
-    assert_raise UndefinedFunctionError,
-                 "function :unknown_module.call/1 is undefined (module :unknown_module is not available)",
+    assert_raise FunctionClauseError,
+                 "no function clause matching in Sage.ExecutorTest.foo/1",
                  fn ->
                    new()
                    |> run(:step1, transaction(:t1), compensation_with_retry(3))
@@ -1322,6 +1322,8 @@ defmodule Sage.ExecutorTest do
              {Sage.ExecutorTest, _test_function, _test_function_arity, _test_function_macro_env} | _rest
            ] = stacktrace
   end
+
+  def foo(:bar), do: :ok
 
   def do_send(msg, _opts, pid), do: send(pid, msg)
 
