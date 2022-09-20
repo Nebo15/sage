@@ -82,6 +82,44 @@ defmodule Sage.ExecutorTest do
     end
   end
 
+  test "async steps use the supplied supervisor if there is one" do
+    test_process = self()
+    ref = make_ref()
+
+    supervisor = ExUnit.Callbacks.start_supervised!({Task.Supervisor, name: Sage.MyTestSupervisor})
+
+    step = fn _, _ ->
+      ancestors = Process.info(self()) |> Keyword.fetch!(:dictionary) |> Keyword.fetch!(:"$ancestors")
+      send(test_process, {ref, ancestors})
+      {:ok, :ok}
+    end
+
+    new()
+    |> run_async(:step1, step, :noop, supervisor: supervisor)
+    |> execute(1)
+
+    assert_receive({^ref, ancestors})
+    assert [Sage.MyTestSupervisor | _rest] = ancestors
+  end
+
+  test "async steps use the defualt supervisor if none is supplied" do
+    test_process = self()
+    ref = make_ref()
+
+    step = fn _, _ ->
+      ancestors = Process.info(self()) |> Keyword.fetch!(:dictionary) |> Keyword.fetch!(:"$ancestors")
+      send(test_process, {ref, ancestors})
+      {:ok, :ok}
+    end
+
+    new()
+    |> run_async(:step1, step, :noop)
+    |> execute(1)
+
+    assert_receive({^ref, ancestors})
+    assert [Sage.AsyncTransactionSupervisor | _rest] = ancestors
+  end
+
   test "effects are not compensated for operations with :noop compensation" do
     {hook, hook_assertion} = final_hook_with_assertion(:error, a: :b)
 

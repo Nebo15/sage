@@ -70,8 +70,13 @@ defmodule Sage do
 
   @typedoc """
   Options for asynchronous transaction stages.
+
+  ## Options
+
+  * `:timeout` - a timeout in milliseconds or `:infinity` for which we will await for the task process to finish the execution, default: `5000`. For more details see Elixir's `Task.await/2`;
+  * `:supervisor` - the name of a `Task.Supervisor` process that will be used to spawn the async task. Defaults to the `Sage.AsyncTransactionSupervisor` started by Sage application.
   """
-  @type async_opts :: [{:timeout, integer() | :infinity}]
+  @type async_opts :: [{:timeout, integer() | :infinity} | {:supervisor, atom()}]
 
   @typedoc """
   Retry options.
@@ -300,7 +305,7 @@ defmodule Sage do
 
   Tracer can be a module that must implement `Sage.Tracer` behaviour,
   a function, or a tuple in a shape of `{module, function, [extra_arguments]}`. 
-  
+
   In any case, the function called should follow the definition of `c:Sage.Tracer.handle_event/3`
   and accept at least 3 required arguments that are documented by the callback.
 
@@ -382,6 +387,10 @@ defmodule Sage do
 
     * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
     `:infinity` will wait indefinitely (default: 5000);
+    * `:supervisor` - the name of a supervisor that the task will be spawned under. Defaults to the\
+    `Sage.AsyncTransactionSupervisor` started by Sage (meaning it will exist under Sage's supervision\
+    tree). It might be a good idea to pass your own in to avoid race conditions on shutdown if your\
+    step interacts with a process in your own app's supervision tree.
   """
   @spec run_async(
           sage :: t(),
@@ -427,8 +436,8 @@ defmodule Sage do
   ## Async Stages
 
   If you are using `run_async/5` with `transaction/4` the code that is run in async stages would
-  not reuse the same database connection, which menas that if transaction is rolled back the effects
-  of async stages should still be rolled back manually.
+  not reuse the same database connection, which means that if the transaction is rolled back the
+  effects of async stages should still be rolled back manually.
   """
   @doc since: "0.3.3"
   @spec transaction(sage :: t(), repo :: module(), opts :: any(), transaction_opts :: any()) ::
