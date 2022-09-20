@@ -71,12 +71,10 @@ defmodule Sage do
   @typedoc """
   Options for asynchronous transaction stages.
 
-  Available async options:
+  ## Options
 
-  * `:timeout` - the maximum amount of time we will await the task used for an async step (in ms).\
-  If :infinity is used it will wait forever.
-  * `:supervisor` - The name of a supervisor that the task will be spawned under. Defaults to the\
-  `Sage.AsyncTransactionSupervisor` started by Sage.
+  * `:timeout` - a timeout in milliseconds or `:infinity` for which we will await for the task process to finish the execution, default: `5000`. For more details see Elixir's `Task.await/2`;
+  * `:supervisor` - the name of a `Task.Supervisor` process that will be used to spawn the async task. Defaults to the `Sage.AsyncTransactionSupervisor` started by Sage application.
   """
   @type async_opts :: [{:timeout, integer() | :infinity} | {:supervisor, atom()}]
 
