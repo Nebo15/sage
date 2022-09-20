@@ -2,7 +2,7 @@ defmodule Sage.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/Nebo15/sage"
-  @version "0.6.2"
+  @version "0.6.3"
 
   def project do
     [
