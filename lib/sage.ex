@@ -70,8 +70,15 @@ defmodule Sage do
 
   @typedoc """
   Options for asynchronous transaction stages.
+
+  Available async options:
+
+  * `:timeout` - the maximum amount of time we will await the task used for an async step (in ms).\
+  If :infinity is used it will wait forever.
+  * `:supervisor` - The name of a supervisor that the task will be spawned under. Defaults to the\
+  `Sage.AsyncTransactionSupervisor` started by Sage.
   """
-  @type async_opts :: [{:timeout, integer() | :infinity}]
+  @type async_opts :: [{:timeout, integer() | :infinity} | {:supervisor, atom()}]
 
   @typedoc """
   Retry options.
@@ -382,6 +389,10 @@ defmodule Sage do
 
     * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
     `:infinity` will wait indefinitely (default: 5000);
+    * `:supervisor` - the name of a supervisor that the task will be spawned under. Defaults to the\
+    `Sage.AsyncTransactionSupervisor` started by Sage (meaning it will exist under Sage's supervision\
+    tree). It might be a good idea to pass your own in to avoid race conditions on shutdown if your\
+    step interacts with a process in your own app's supervision tree.
   """
   @spec run_async(
           sage :: t(),
