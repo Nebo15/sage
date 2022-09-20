@@ -73,19 +73,23 @@ defmodule Sage do
 
   ## Options
 
-  * `:timeout` - a timeout in milliseconds or `:infinity` for which we will await for the task process to finish the execution, default: `5000`. For more details see Elixir's `Task.await/2`;
-  * `:supervisor` - the name of a `Task.Supervisor` process that will be used to spawn the async task. Defaults to the `Sage.AsyncTransactionSupervisor` started by Sage application.
+    * `:timeout` - a timeout in milliseconds or `:infinity` for which we will await for the task process to
+    finish the execution, default: `5000`. For more details see `Task.await/2`;
+
+    * `:supervisor` - the name of a `Task.Supervisor` process that will be used to spawn the async task.
+    Defaults to the `Sage.AsyncTransactionSupervisor` started by Sage application.
   """
   @type async_opts :: [{:timeout, integer() | :infinity} | {:supervisor, atom()}]
 
   @typedoc """
-  Retry options.
+  Retry options configure how Sage will retry a transaction.
 
   Retry count for all a sage execution is shared and stored internally,
   so even through you can increase retry limit - retry count would be
   never reset to make sure that execution would not be retried infinitely.
 
-  Available retry options:
+  ## Options
+
     * `:retry_limit` - is the maximum number of possible retry attempts;
     * `:base_backoff` - is the base backoff for retries in ms, no backoff is applied if this value is nil or not set;
     * `:max_backoff` - is the maximum backoff value, default: `5_000` ms.;
@@ -304,7 +308,7 @@ defmodule Sage do
   but it won't affect Sage execution.
 
   Tracer can be a module that must implement `Sage.Tracer` behaviour,
-  a function, or a tuple in a shape of `{module, function, [extra_arguments]}`. 
+  a function, or a tuple in a shape of `{module, function, [extra_arguments]}`.
 
   In any case, the function called should follow the definition of `c:Sage.Tracer.handle_event/3`
   and accept at least 3 required arguments that are documented by the callback.
@@ -346,12 +350,12 @@ defmodule Sage do
 
   Raises `Sage.DuplicateStageError` exception if stage name is duplicated for a given sage.
 
-  ### Callbacks
+  ## Callbacks
 
   Callbacks can be either anonymous function or an `{module, function, [arguments]}` tuple.
   For callbacks interface see `t:transaction/0` and `t:compensation/0` type docs.
 
-  ### Noop compensation
+  ## Noop compensation
 
   If transaction does not produce effect to compensate, pass `:noop` instead of compensation
   callback or use `run/3`.
@@ -376,21 +380,45 @@ defmodule Sage do
   of sage execution. If there is an error in asynchronous transaction, Sage will await for other
   transactions to complete or fail and then compensate for all the effect created by them.
 
-  # Callbacks
+  ## Callbacks and effects
 
   Transaction callback for asynchronous stages receives only effects created by preceding
   synchronous transactions.
 
   For more details see `run/4`.
 
+  ## Using your own `Task.Supervisor`
+
+  By default Sage uses it's own `Task.Supervisor` with a name of `Sage.AsyncTransactionSupervisor` to run
+  asynchronous stages meaning that when your applications stops some async stages still might be executing
+  because the tasks are part of Sage application supervision tree which would be stopped after the application.
+
+  This can lead to unwanted race conditions on shutdown but can be changed by starting your own
+  named `Task.Supervisor` in the application supervision tree:
+
+      children = [
+        {Task.Supervisor, name: MyApp.SageAsyncTransactionSupervisor}
+        ...,
+      ]
+
+  and using it in `:supervisor` option:
+
+      |> run_async(..., supervisor: MyApp.SageAsyncTransactionSupervisor)
+
+  If you face any further race conditions make sure that this supervisor is started before the code that
+  calls `execute/2` or `transaction/4` functions.
+
+  This option also allows you to control how the task supervisor behaves in case of rapid failures,
+  for more details see `Task.Supervisor.start_link/1` options.
+
   ## Options
 
-    * `:timeout` - the time in milliseconds to wait for the transaction to finish, \
-    `:infinity` will wait indefinitely (default: 5000);
-    * `:supervisor` - the name of a supervisor that the task will be spawned under. Defaults to the\
-    `Sage.AsyncTransactionSupervisor` started by Sage (meaning it will exist under Sage's supervision\
-    tree). It might be a good idea to pass your own in to avoid race conditions on shutdown if your\
-    step interacts with a process in your own app's supervision tree.
+    * `:timeout` - a timeout in milliseconds or `:infinity` for which we will await for the task process to
+    finish the execution, default: `5000`. For more details see `Task.await/2`;
+
+    * `:supervisor` - the name of a `Task.Supervisor` process that will be used to spawn the async task.
+    Defaults to the `Sage.AsyncTransactionSupervisor` started by Sage application.
+
   """
   @spec run_async(
           sage :: t(),
