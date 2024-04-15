@@ -21,7 +21,7 @@ defmodule Sage.AsyncTransactionTimeoutError do
   def message(%__MODULE__{name: name, timeout: timeout}) do
     """
     asynchronous transaction for operation #{name} has timed out,
-    expected it to return within #{to_string(timeout)} microseconds
+    expected it to return within #{to_string(timeout)} milliseconds
     """
   end
 end
