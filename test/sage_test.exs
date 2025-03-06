@@ -254,6 +254,70 @@ defmodule SageTest do
     end
   end
 
+  describe "interleaves/3" do
+    test "adds a step between every transaction" do
+      sage =
+        new()
+        |> run(:t1, transaction(:t1))
+        |> run(:t2, transaction(:t2))
+        |> run_async(:t_async, transaction(:t_async), :noop)
+        |> run(:t3, transaction(:t3))
+        |> interleave(:i, fn _effects, _args, previous_stage_name -> {:ok, previous_stage_name} end)
+
+      assert [i_4: _, t3: _, i_3: _, t_async: _, i_2: _, t2: _, i_1: _, t1: _] = sage.stages
+      assert {:ok, _, %{i_4: :t3, i_3: :t_async, i_2: :t2, i_1: :t1}} = execute(sage)
+    end
+
+    test "adds nothing if there are no transactions" do
+      assert [] =
+               new()
+               |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
+               |> Map.get(:stages)
+    end
+
+    test "adds a transaction at the end if there is one transaction" do
+      assert [i_1: _, t1: _] =
+               new()
+               |> run(:t1, transaction(:t1))
+               |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
+               |> Map.get(:stages)
+    end
+
+    test "works with mfa" do
+      sage =
+        new()
+        |> run(:t1, transaction(:t1))
+        |> run(:t2, transaction(:t2))
+        |> run(:t3, transaction(:t3))
+        |> interleave(:i, {TestIntermediateTransactionHandler, :intermediate_transaction_handler, [:foo]})
+
+      assert {:ok, _, %{i_3: {:t3, :foo}, i_2: {:t2, :foo}, i_1: {:t1, :foo}}} = execute(sage)
+    end
+
+    test "can run a compensations" do
+      new()
+      |> run(:t1, transaction(:t1))
+      |> run(:t2, transaction(:t2))
+      |> run(:t3, transaction_with_error(:t3))
+      |> interleave(:i, fn _effects, _args, _previous_stage_name -> {:ok, nil} end, fn _errored_effect, _effects_so_far, _attrs ->
+        send(self(), :compensating)
+        :ok
+      end)
+      |> execute()
+
+      for _ <- 1..2, do: assert_received(:compensating)
+    end
+
+    test "errors if used more than once" do
+      assert_raise Sage.DuplicateStageError, fn ->
+        new()
+        |> run(:t1, transaction(:t1))
+        |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
+        |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
+      end
+    end
+  end
+
   def dummy_transaction_for_mfa(_effects_so_far, _opts), do: raise("Not implemented")
   def dummy_compensation_for_mfa(_effect_to_compensate, _opts), do: raise("Not implemented")
   def dummy_final_cb(_status, _opts, _return), do: raise("Not implemented")

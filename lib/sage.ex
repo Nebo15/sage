@@ -164,6 +164,16 @@ defmodule Sage do
   defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
 
   @typedoc """
+  Just like a transaction, although it receives extra argument of the name of the previous transaction
+  """
+  @type intermediate_transaction ::
+          (effects_so_far :: effects(), attrs :: any(), previous_stage :: stage_name() ->
+             {:ok | :error | :abort, any()})
+          | mfa()
+
+  defguardp is_intermediate_transaction(value) when is_function(value, 3) or is_mfa(value)
+
+  @typedoc """
   Tracer callback, can be a module that implements `Sage.Tracer` behaviour, an anonymous function, or an
   `{module, function, [arguments]}` tuple.
 
@@ -436,6 +446,57 @@ defmodule Sage do
         ) :: t()
   def run_async(sage, name, transaction, compensation, opts \\ []),
     do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
+
+  @doc """
+  For a given Sage S with transactions :t1 -> :t2 -> :t3, a call to `interleave(S, :name, f)`
+  will yield a saga with transactions :t1 -> :name_1 -> :t2 -> :name_2 -> :t3 -> :name_3.
+
+  This can be useful if you are trying to do a long computation and want to do something with
+  the intermediate results, such as logging or persistence.
+  
+  Note: 
+  - This isn't strict interleaving because a transaction is still appended at the end.
+  - Calling this function twice with the same name will give a `Sage.DuplicateStageError`, but
+  calling the function twice with a different name will compound its effects.
+  - Calling this function before the end of your saga definition will mean any stages you add after the
+  call to `interleave` will not have the intermediate stages added after them
+  """
+  @spec interleave(
+          sage :: t(),
+          name :: stage_name(),
+          intermediate_transaction :: intermediate_transaction(),
+          compensation :: compensation()
+        ) :: t()
+  def interleave(sage, name, intermediate_transaction, compensation \\ :noop)
+      when is_intermediate_transaction(intermediate_transaction) and is_compensation(compensation) do
+    sage.stages
+    |> Enum.reverse()
+    |> Enum.with_index(1)
+    |> Enum.flat_map(fn {stage, index} ->
+      name = String.to_atom("#{name}_#{index}")
+      {stage_name, _} = stage
+
+      transaction =
+        case intermediate_transaction do
+          {m, f, a} ->
+            {m, f, [stage_name | a]}
+
+          _ ->
+            &intermediate_transaction.(&1, &2, stage_name)
+        end
+
+      [stage, {name, build_operation!(:run, transaction, compensation)}]
+    end)
+    |> Enum.reduce(new(), fn stage, sage ->
+      case stage do
+        {name, {:run, transaction, comp, _opts}} ->
+          run(sage, name, transaction, comp)
+
+        {name, {:run_async, transaction, comp, opts}} ->
+          run_async(sage, name, transaction, comp, opts)
+      end
+    end)
+  end
 
   @doc """
   Executes a Sage.
