@@ -269,10 +269,9 @@ defmodule SageTest do
     end
 
     test "adds nothing if there are no transactions" do
-      assert [] =
-               new()
-               |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
-               |> Map.get(:stages)
+      sage = interleave(new(), :i, fn _effects, _args, _previous_stage_name -> :ok end)
+
+      assert sage.stages == []
     end
 
     test "adds a transaction at the end if there is one transaction" do
