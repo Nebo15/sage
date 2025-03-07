@@ -453,7 +453,7 @@ defmodule Sage do
 
   This can be useful if you are trying to do a long computation and want to do something with
   the intermediate results, such as logging or persistence.
-  
+
   Note: 
   - This isn't strict interleaving because a transaction is still appended at the end.
   - Calling this function twice with the same name will give a `Sage.DuplicateStageError`, but
@@ -469,33 +469,27 @@ defmodule Sage do
         ) :: t()
   def interleave(sage, name, intermediate_transaction, compensation \\ :noop)
       when is_intermediate_transaction(intermediate_transaction) and is_compensation(compensation) do
-    sage.stages
-    |> Enum.reverse()
-    |> Enum.with_index(1)
-    |> Enum.flat_map(fn {stage, index} ->
-      name = String.to_atom("#{name}_#{index}")
-      {stage_name, _} = stage
+    new_stages =
+      sage.stages
+      |> Enum.reverse()
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {stage, index} ->
+        name = String.to_atom("#{name}_#{index}")
+        {stage_name, _} = stage
 
-      transaction =
-        case intermediate_transaction do
-          {m, f, a} ->
-            {m, f, [stage_name | a]}
+        transaction =
+          case intermediate_transaction do
+            {m, f, a} ->
+              {m, f, [stage_name | a]}
 
-          _ ->
-            &intermediate_transaction.(&1, &2, stage_name)
-        end
+            _ ->
+              &intermediate_transaction.(&1, &2, stage_name)
+          end
 
-      [stage, {name, build_operation!(:run, transaction, compensation)}]
-    end)
-    |> Enum.reduce(new(), fn stage, sage ->
-      case stage do
-        {name, {:run, transaction, comp, _opts}} ->
-          run(sage, name, transaction, comp)
+        [stage, {name, build_operation!(:run, transaction, compensation)}]
+      end)
 
-        {name, {:run_async, transaction, comp, opts}} ->
-          run_async(sage, name, transaction, comp, opts)
-      end
-    end)
+    add_stages(%{sage | stage_names: MapSet.new(), stages: []}, new_stages)
   end
 
   @doc """
@@ -558,16 +552,39 @@ defmodule Sage do
   end
 
   defp add_stage(sage, name, operation) do
+    add_stages(sage, [{name, operation}])
+  end
+
+  defp add_stages(sage, name_operation_pairs) do
     %{stages: stages, stage_names: names} = sage
 
-    if MapSet.member?(names, name) do
-      raise Sage.DuplicateStageError, sage: sage, name: name
-    else
-      %{
-        sage
-        | stages: [{name, operation} | stages],
-          stage_names: MapSet.put(names, name)
-      }
+    {names_to_add_list, _operations} =
+      Enum.unzip(name_operation_pairs)
+
+    names_to_add_set = MapSet.new(names_to_add_list)
+
+    duplicates =
+      names_to_add_set
+      |> MapSet.intersection(names)
+      |> MapSet.to_list()
+
+    cond do
+      # There is a duplicate between what was existing in the struct beforehand and
+      # what was passed to this function
+      !Enum.empty?(duplicates) ->
+        raise Sage.DuplicateStageError, sage: sage, name: hd(duplicates)
+
+      # There was a duplicate within name_operation_pairs
+      length(names_to_add_list) != MapSet.size(names_to_add_set) ->
+        duplicates = names_to_add_list -- MapSet.to_list(names_to_add_set)
+        raise Sage.DuplicateStageError, sage: sage, name: hd(duplicates)
+
+      true ->
+        %{
+          sage
+          | stages: Enum.reverse(name_operation_pairs) ++ stages,
+            stage_names: MapSet.union(names, names_to_add_set)
+        }
     end
   end
 
