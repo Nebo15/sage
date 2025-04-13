@@ -264,8 +264,24 @@ defmodule SageTest do
         |> run(:t3, transaction(:t3))
         |> interleave(:i, fn _effects, _args, previous_stage_name -> {:ok, previous_stage_name} end)
 
-      assert [i_4: _, t3: _, i_3: _, t_async: _, i_2: _, t2: _, i_1: _, t1: _] = sage.stages
-      assert {:ok, _, %{i_4: :t3, i_3: :t_async, i_2: :t2, i_1: :t1}} = execute(sage)
+      assert [
+               {{:interleave, :i, 4}, _},
+               {:t3, _},
+               {{:interleave, :i, 3}, _},
+               {:t_async, _},
+               {{:interleave, :i, 2}, _},
+               {:t2, _},
+               {{:interleave, :i, 1}, _},
+               t1: _
+             ] = sage.stages
+
+      assert {:ok, _,
+              %{
+                {:interleave, :i, 4} => :t3,
+                {:interleave, :i, 3} => :t_async,
+                {:interleave, :i, 2} => :t2,
+                {:interleave, :i, 1} => :t1
+              }} = execute(sage)
     end
 
     test "adds nothing if there are no transactions" do
@@ -275,7 +291,7 @@ defmodule SageTest do
     end
 
     test "adds a transaction at the end if there is one transaction" do
-      assert [i_1: _, t1: _] =
+      assert [{{:interleave, :i, 1}, _}, t1: _] =
                new()
                |> run(:t1, transaction(:t1))
                |> interleave(:i, fn _effects, _args, _previous_stage_name -> :ok end)
@@ -290,7 +306,12 @@ defmodule SageTest do
         |> run(:t3, transaction(:t3))
         |> interleave(:i, {TestIntermediateTransactionHandler, :intermediate_transaction_handler, [:foo]})
 
-      assert {:ok, _, %{i_3: {:t3, :foo}, i_2: {:t2, :foo}, i_1: {:t1, :foo}}} = execute(sage)
+      assert {:ok, _,
+              %{
+                {:interleave, :i, 3} => {:t3, :foo},
+                {:interleave, :i, 2} => {:t2, :foo},
+                {:interleave, :i, 1} => {:t1, :foo}
+              }} = execute(sage)
     end
 
     test "can run a compensations" do
@@ -298,7 +319,9 @@ defmodule SageTest do
       |> run(:t1, transaction(:t1))
       |> run(:t2, transaction(:t2))
       |> run(:t3, transaction_with_error(:t3))
-      |> interleave(:i, fn _effects, _args, _previous_stage_name -> {:ok, nil} end, fn _errored_effect, _effects_so_far, _attrs ->
+      |> interleave(:i, fn _effects, _args, _previous_stage_name -> {:ok, nil} end, fn _errored_effect,
+                                                                                       _effects_so_far,
+                                                                                       _attrs ->
         send(self(), :compensating)
         :ok
       end)

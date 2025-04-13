@@ -474,7 +474,7 @@ defmodule Sage do
       |> Enum.reverse()
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {stage, index} ->
-        name = String.to_atom("#{name}_#{index}")
+        name = {:interleave, name, index}
         {stage_name, _} = stage
 
         transaction =
