@@ -448,8 +448,9 @@ defmodule Sage do
     do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
-  For a given Sage S with transactions :t1 -> :t2 -> :t3, a call to `interleave(S, :name, f)`
-  will yield a saga with transactions :t1 -> :name_1 -> :t2 -> :name_2 -> :t3 -> :name_3.
+  For a given Sage S with transactions `:t1` -> `:t2` -> `:t3`, a call to `interleave(S, :name, f)`
+  will yield a saga with transactions `:t1` -> `{:interleave, :name, 1}` -> `:t2` -> `{:interleave, :name, 2}`
+  -> `:t3` -> `{:interleave, :name, 3}`.
 
   This can be useful if you are trying to do a long computation and want to do something with
   the intermediate results, such as logging or persistence.
