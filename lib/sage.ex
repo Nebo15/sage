@@ -164,6 +164,16 @@ defmodule Sage do
   defguardp is_transaction(value) when is_function(value, 2) or is_mfa(value)
 
   @typedoc """
+  Just like a transaction, although it receives extra argument of the name of the previous transaction
+  """
+  @type intermediate_transaction ::
+          (effects_so_far :: effects(), attrs :: any(), previous_stage :: stage_name() ->
+             {:ok | :error | :abort, any()})
+          | mfa()
+
+  defguardp is_intermediate_transaction(value) when is_function(value, 3) or is_mfa(value)
+
+  @typedoc """
   Tracer callback, can be a module that implements `Sage.Tracer` behaviour, an anonymous function, or an
   `{module, function, [arguments]}` tuple.
 
@@ -438,6 +448,52 @@ defmodule Sage do
     do: add_stage(sage, name, build_operation!(:run_async, transaction, compensation, opts))
 
   @doc """
+  For a given Sage S with transactions `:t1` -> `:t2` -> `:t3`, a call to `interleave(S, :name, f)`
+  will yield a saga with transactions `:t1` -> `{:interleave, :name, 1}` -> `:t2` -> `{:interleave, :name, 2}`
+  -> `:t3` -> `{:interleave, :name, 3}`.
+
+  This can be useful if you are trying to do a long computation and want to do something with
+  the intermediate results, such as logging or persistence.
+
+  Note: 
+  - This isn't strict interleaving because a transaction is still appended at the end.
+  - Calling this function twice with the same name will give a `Sage.DuplicateStageError`, but
+  calling the function twice with a different name will compound its effects.
+  - Calling this function before the end of your saga definition will mean any stages you add after the
+  call to `interleave` will not have the intermediate stages added after them
+  """
+  @spec interleave(
+          sage :: t(),
+          name :: stage_name(),
+          intermediate_transaction :: intermediate_transaction(),
+          compensation :: compensation()
+        ) :: t()
+  def interleave(sage, name, intermediate_transaction, compensation \\ :noop)
+      when is_intermediate_transaction(intermediate_transaction) and is_compensation(compensation) do
+    new_stages =
+      sage.stages
+      |> Enum.reverse()
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {stage, index} ->
+        name = {:interleave, name, index}
+        {stage_name, _} = stage
+
+        transaction =
+          case intermediate_transaction do
+            {m, f, a} ->
+              {m, f, [stage_name | a]}
+
+            _ ->
+              &intermediate_transaction.(&1, &2, stage_name)
+          end
+
+        [stage, {name, build_operation!(:run, transaction, compensation)}]
+      end)
+
+    add_stages(%{sage | stage_names: MapSet.new(), stages: []}, new_stages)
+  end
+
+  @doc """
   Executes a Sage.
 
   Optionally, you can pass global options in `opts`, that will be sent to
@@ -497,16 +553,39 @@ defmodule Sage do
   end
 
   defp add_stage(sage, name, operation) do
+    add_stages(sage, [{name, operation}])
+  end
+
+  defp add_stages(sage, name_operation_pairs) do
     %{stages: stages, stage_names: names} = sage
 
-    if MapSet.member?(names, name) do
-      raise Sage.DuplicateStageError, sage: sage, name: name
-    else
-      %{
-        sage
-        | stages: [{name, operation} | stages],
-          stage_names: MapSet.put(names, name)
-      }
+    {names_to_add_list, _operations} =
+      Enum.unzip(name_operation_pairs)
+
+    names_to_add_set = MapSet.new(names_to_add_list)
+
+    duplicates =
+      names_to_add_set
+      |> MapSet.intersection(names)
+      |> MapSet.to_list()
+
+    cond do
+      # There is a duplicate between what was existing in the struct beforehand and
+      # what was passed to this function
+      !Enum.empty?(duplicates) ->
+        raise Sage.DuplicateStageError, sage: sage, name: hd(duplicates)
+
+      # There was a duplicate within name_operation_pairs
+      length(names_to_add_list) != MapSet.size(names_to_add_set) ->
+        duplicates = names_to_add_list -- MapSet.to_list(names_to_add_set)
+        raise Sage.DuplicateStageError, sage: sage, name: hd(duplicates)
+
+      true ->
+        %{
+          sage
+          | stages: Enum.reverse(name_operation_pairs) ++ stages,
+            stage_names: MapSet.union(names, names_to_add_set)
+        }
     end
   end
 
