@@ -467,7 +467,7 @@ defmodule Sage.Executor do
       end)
 
     _ =
-      Logger.warn("""
+      Logger.warning("""
       [Sage] compensation #{inspect(name)} failed to compensate effect:
 
         #{inspect(compensated_effect)}
